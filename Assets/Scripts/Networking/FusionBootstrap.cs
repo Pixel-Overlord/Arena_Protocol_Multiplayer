@@ -7,12 +7,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Owns the NetworkRunner, starts host/client sessions and drives player spawning.
-///
-/// Join callbacks are registered explicitly with runner.AddCallbacks rather than
-/// relying on Fusion discovering an IPlayerJoined in the loaded scene - Fusion only
-/// registers NetworkObjects from a loaded scene, and a NetworkObject only tracks
-/// NetworkBehaviours, so a plain SimulationBehaviour is never called.
+/// This class does the following things:
+///     1. 
 /// </summary>
 public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -66,8 +62,8 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 
         args.GameMode = mode;
         args.SessionName = roomName;
-        args.SceneManager = GetOrAdd<NetworkSceneManagerDefault>();
-        args.ObjectProvider = GetOrAdd<NetworkObjectProviderDefault>();
+        args.SceneManager = GetComponent<NetworkSceneManagerDefault>();
+        args.ObjectProvider = GetComponent<NetworkObjectProviderDefault>();
 
         // Only the host loads the arena. A joining client is told which scene
         // to load by the host, so passing a scene here would fight that.
@@ -86,6 +82,44 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
         {
             Debug.LogError($"Failed to start {mode}: {result.ShutdownReason}");
         }
+    }
+
+    /// <summary>
+    /// Polled by Fusion every tick to gather this peer's local input. Requires
+    /// runner.ProvideInput, which StartGame sets. The result is sent to the host
+    /// and replayed during resimulation.
+    /// </summary>
+    void INetworkRunnerCallbacks.OnInput(NetworkRunner runner, NetworkInput input)
+    {
+        NetworkInputData data = new NetworkInputData();
+
+        Vector3 direction = Vector3.zero;
+
+        if (Input.GetKey(KeyCode.W))
+        {
+            direction += Vector3.forward;
+        }
+
+        if (Input.GetKey(KeyCode.S))
+        {
+            direction += Vector3.back;
+        }
+
+        if (Input.GetKey(KeyCode.A))
+        {
+            direction += Vector3.left;
+        }
+
+        if (Input.GetKey(KeyCode.D))
+        {
+            direction += Vector3.right;
+        }
+
+        // Pressing W+D gives (1,0,1), which has length 1.41 - normalizing keeps
+        // diagonal movement the same speed as the cardinal directions.
+        data.Direction = direction.normalized;
+
+        input.Set(data);
     }
 
     void INetworkRunnerCallbacks.OnPlayerJoined(NetworkRunner runner, PlayerRef player)
@@ -137,9 +171,9 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
+    #region Unused Callbacks
     void INetworkRunnerCallbacks.OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
     void INetworkRunnerCallbacks.OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-    void INetworkRunnerCallbacks.OnInput(NetworkRunner runner, NetworkInput input) { }
     void INetworkRunnerCallbacks.OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
     void INetworkRunnerCallbacks.OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
     void INetworkRunnerCallbacks.OnConnectedToServer(NetworkRunner runner) { }
@@ -153,14 +187,5 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
     void INetworkRunnerCallbacks.OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
     void INetworkRunnerCallbacks.OnSceneLoadStart(NetworkRunner runner) { }
 
-    /// <summary>
-    /// Fusion requires a scene manager and an object provider on the runner's
-    /// GameObject. Adding them on demand keeps this working no matter how the
-    /// bootstrap object is set up in the scene.
-    /// </summary>
-    private T GetOrAdd<T>() where T : Component
-    {
-        T component = GetComponent<T>();
-        return component != null ? component : gameObject.AddComponent<T>();
-    }
+    #endregion
 }

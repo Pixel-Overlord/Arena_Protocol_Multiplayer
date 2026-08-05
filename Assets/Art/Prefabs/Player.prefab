@@ -12,6 +12,8 @@ GameObject:
   - component: {fileID: 7525049746414976095}
   - component: {fileID: 8979020000220925271}
   - component: {fileID: 4595721123032128966}
+  - component: {fileID: 7129700180082969562}
+  - component: {fileID: -7386971790285655559}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -80,6 +82,8 @@ MonoBehaviour:
   NestedObjects: []
   NetworkedBehaviours:
   - {fileID: 4595721123032128966}
+  - {fileID: 7129700180082969562}
+  - {fileID: -7386971790285655559}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &4595721123032128966
 MonoBehaviour:
@@ -100,6 +104,32 @@ MonoBehaviour:
   braking: 10
   maxSpeed: 2
   rotationSpeed: 15
+--- !u!114 &7129700180082969562
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 917205788353981796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de8e30808f2849d4aaa4cde68d7dfcab, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &-7386971790285655559
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 917205788353981796}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d63cdb919dc452c4ea6e0156d8153be8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  offset: {x: 0, y: 10, z: -10}
+  smoothTime: 0.15
 --- !u!1 &5679893399707045007
 GameObject:
   m_ObjectHideFlags: 0
