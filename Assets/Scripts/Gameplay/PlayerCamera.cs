@@ -21,6 +21,14 @@ public class PlayerCamera : NetworkBehaviour
     private Transform cameraTransform;
     private Vector3 followVelocity;
 
+    private PlayerHealth playerHealth;
+    private PlayerHealth spectateTarget;
+
+    private void Awake()
+    {
+        playerHealth = GetComponent<PlayerHealth>();
+    }
+
     public override void Spawned()
     {
         // Remote copies leave cameraTransform null and do nothing in LateUpdate.
@@ -56,7 +64,24 @@ public class PlayerCamera : NetworkBehaviour
             return;
         }
 
-        Vector3 desiredPosition = transform.position + offset;
+        Transform followTarget = transform;
+
+        if (playerHealth.isDead)
+        {
+            if (spectateTarget == null || spectateTarget.isDead)
+            {
+                spectateTarget = findLivingPlayer();
+            }
+
+            if (spectateTarget == null)
+            {
+                return; // everyone's dead, hold last position.
+            }
+
+            followTarget = spectateTarget.transform;
+        }
+
+        Vector3 desiredPosition = followTarget.position + offset;
 
         cameraTransform.position = Vector3.SmoothDamp(
             cameraTransform.position,
@@ -64,6 +89,19 @@ public class PlayerCamera : NetworkBehaviour
             ref followVelocity,
             smoothTime);
 
-        cameraTransform.LookAt(transform.position);
+        cameraTransform.LookAt(followTarget.position);
+    }
+
+
+    private PlayerHealth findLivingPlayer()
+    {
+        foreach (var player in FindObjectsOfType<PlayerHealth>())
+        {
+            if (player != playerHealth && !player.isDead)
+            {
+                return player;
+            }
+        }
+        return null;
     }
 }
