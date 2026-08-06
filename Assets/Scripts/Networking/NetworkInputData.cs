@@ -15,4 +15,6 @@ public struct NetworkInputData : INetworkInput
     /// Normalized world-space direction built from WASD. Zero when idle.
     /// </summary>
     public Vector3 Direction;
+
+    public NetworkButtons Buttons;
 }

@@ -48,6 +48,8 @@ public class PlayerSpawner : MonoBehaviour
         // Registers the object against the player so despawning can find it
         // again - without this GetPlayerObject always returns null.
         runner.SetPlayerObject(player, playerObject);
+
+        playerObject.GetComponent<PlayerAbility>().Type = UnityEngine.Random.Range(0, 2) == 0 ? PlayerAbility.AbilityType.Shield : PlayerAbility.AbilityType.Heal;
     }
 
     public void DespawnPlayer(NetworkRunner runner, PlayerRef player)

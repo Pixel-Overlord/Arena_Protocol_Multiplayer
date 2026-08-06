@@ -2,12 +2,13 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Makes the arena camera follow this player, but only on the peer that owns it.
+/// 1. Makes the arena camera follow this player, but only on the peer that owns it.
 ///
-/// Every peer spawns a copy of every player prefab, so this has to opt out on the
-/// remote copies - otherwise two players would fight over the same camera.
-/// HasInputAuthority is true on exactly one peer per player, which makes it the
-/// right test for "is this my player".
+/// 2. Adds a fallback so a dead player's camera follows a living player
+/// instead of its own (now-hidden) capsule.
+/// 
+/// 3. A dead player keeps watching the match
+/// through a teammate rather than staring at nothing.
 /// </summary>
 public class PlayerCamera : NetworkBehaviour
 {
@@ -22,6 +23,8 @@ public class PlayerCamera : NetworkBehaviour
     private Vector3 followVelocity;
 
     private PlayerHealth playerHealth;
+
+    [Tooltip("the living player's player health currently being followed while this player is dead.")]
     private PlayerHealth spectateTarget;
 
     private void Awake()
