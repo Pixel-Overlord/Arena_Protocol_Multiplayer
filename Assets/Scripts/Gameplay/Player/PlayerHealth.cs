@@ -18,9 +18,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     [SerializeField] private float maxHealth = 100f;
 
-    // Collected in Awake rather than wired in the inspector, so the Player prefab needs no
-    // extra setup and can't be half-configured. Cached because OnChangedRender can fire
-    // often and GetComponentsInChildren allocates.
     private Renderer[] bodyRenderers;
     private Collider[] bodyColliders;
 
@@ -30,7 +27,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
 
     private void Awake()
     {
-        // true = include inactive, so a body part that starts disabled is still tracked.
         bodyRenderers = GetComponentsInChildren<Renderer>(true);
         bodyColliders = GetComponentsInChildren<Collider>(true);
     }
@@ -45,15 +41,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             currentHealth = maxHealth;
         }
 
-        // Applied on spawn as well as on change, so a peer that joins mid-match sees an
-        // already-dead player correctly hidden. OnChangedRender only fires on transitions.
         ApplyDeathVisuals();
     }
 
     /// <summary>
-    /// Fires on every peer when isDead flips, because the property is replicated. This is
-    /// why hiding the body needs no RPC - the networked flag is the single source of truth
-    /// and each peer reacts to it locally.
+    /// Applies visual effects related to the death state.
     /// </summary>
     private void OnDeathStateChanged()
     {
@@ -61,8 +53,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// Hides or shows the whole body. Colliders go with the renderers so a corpse cannot
-    /// soak enemy projectiles or block movement.
+    /// Enables or disables all body renderers and colliders based on the character's death state.
     /// </summary>
     private void ApplyDeathVisuals()
     {
@@ -86,13 +77,10 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// Reduces the player's current health by the specified amount
-    /// unless the player is dead or shielded.
-    /// 
-    /// Marks the player as dead if health reaches zero.
-    /// 
+    /// Reduces the player's current health by the specified amount unless the player is dead, lacks state authority, or
+    /// has an active shield.
     /// </summary>
-    /// <param name="damageAmount">The amount of damage to subtract from the player's current health.</param>
+    /// <param name="damageAmount">The amount of damage to subtract from the player's health.</param>
     public void applyDamage(float damageAmount)
     {
         if (!Object.HasStateAuthority || isDead)
@@ -130,24 +118,14 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// Copies this player's health into a snapshot that will outlive the object. Host-side
-    /// only, called just before the player is despawned on disconnect.
+    /// Captures the player's current health state into the specified SavedPlayerState reference.
     /// </summary>
+    /// <param name="state"></param>
     public void CaptureStateInto(ref SavedPlayerState state)
     {
-        // A dead player is recorded as zero, which RestoreState reads as "leave the fresh
-        // full health alone". There is no respawn in this game, so bringing someone back on
-        // 0 HP would hand them a body they could never play again.
         state.Health = isDead ? 0f : currentHealth;
     }
 
-    /// <summary>
-    /// Writes a saved health value back onto a freshly respawned player.
-    ///
-    /// Must run after Spawned(), which unconditionally resets currentHealth to maxHealth -
-    /// that is why PlayerSpawner applies this once runner.Spawn has returned rather than in
-    /// an onBeforeSpawned callback, which would run too early and be overwritten.
-    /// </summary>
     public void RestoreState(SavedPlayerState state)
     {
         if (!Object.HasStateAuthority || state.Health <= 0f)

@@ -3,6 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Represents a networked weapon that manages projectile firing, cooldowns, and player input in a multiplayer
+/// environment.
+/// </summary>
 public class Weapon : NetworkBehaviour
 {
     [Tooltip("The prefab to spawn.")]
