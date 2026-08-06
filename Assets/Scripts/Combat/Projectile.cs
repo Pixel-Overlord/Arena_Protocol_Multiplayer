@@ -125,9 +125,7 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
-        // Enemy fire scores for nobody, so it passes None rather than its own meaningless
-        // PlayerRef. A player's shot carries their PlayerRef down so Enemy can credit the kill.
-        target.applyDamage(damage, firedByEnemy ? PlayerRef.None : player);
+        target.applyDamage(damage);
 
         Runner.Despawn(Object);
     }

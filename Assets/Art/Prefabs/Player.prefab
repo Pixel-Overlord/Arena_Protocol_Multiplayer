@@ -122,7 +122,6 @@ GameObject:
   - component: {fileID: 2179167283393287468}
   - component: {fileID: 5222173411646772121}
   - component: {fileID: 5600525790582512206}
-  - component: {fileID: 3363587176685382561}
   - component: {fileID: 3633866619551893182}
   m_Layer: 6
   m_Name: Player
@@ -199,7 +198,6 @@ MonoBehaviour:
   - {fileID: 2179167283393287468}
   - {fileID: 5222173411646772121}
   - {fileID: 5600525790582512206}
-  - {fileID: 3363587176685382561}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &4595721123032128966
 MonoBehaviour:
@@ -300,19 +298,6 @@ MonoBehaviour:
     RawGuidValue: abf0cca13e9317849966f022524dc934
   firePositionPoint: {fileID: 4759336049034736159}
   fireRate: 0.5
---- !u!114 &3363587176685382561
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 917205788353981796}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d2d84007fc62bf042ae1facb6912694e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _Score: 0
 --- !u!136 &3633866619551893182
 CapsuleCollider:
   m_ObjectHideFlags: 0

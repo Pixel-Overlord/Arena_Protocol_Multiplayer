@@ -93,11 +93,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// 
     /// </summary>
     /// <param name="damageAmount">The amount of damage to subtract from the player's current health.</param>
-    /// <param name="attacker">
-    /// Ignored - there is no friendly fire scoring. Present because IDamageable is shared
-    /// with Enemy, which does need to know who landed the shot.
-    /// </param>
-    public void applyDamage(float damageAmount, PlayerRef attacker)
+    public void applyDamage(float damageAmount)
     {
         if (!Object.HasStateAuthority || isDead)
         {

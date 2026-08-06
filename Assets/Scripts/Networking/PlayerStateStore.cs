@@ -17,8 +17,6 @@ public struct SavedPlayerState
     /// </summary>
     public float Health;
 
-    public int Score;
-
     /// <summary>
     /// Which ability they had. Restored alongside the cooldown below, because a cooldown
     /// only makes sense attached to the ability that spent it - coming back as Heal with a

@@ -5,8 +5,8 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
-/// Screen-space HUD for the arena: the local player's health, power and score bottom-left,
-/// the opponent's health and score top-right. Each score is that player's own.
+/// Screen-space HUD for the arena: the local player's health and power bottom-left, the
+/// opponent's health top-right, and the shared team score.
 ///
 /// A plain MonoBehaviour on the PlayerUI object, not a NetworkBehaviour. The HUD only ever
 /// reads replicated state and never writes it, so it needs no authority and no NetworkObject.
@@ -31,13 +31,6 @@ public class PlayerHUD : MonoBehaviour
     [Tooltip("Reads 'Shield' or 'Heal' depending on which ability this player was assigned.")]
     [SerializeField] private TMP_Text localPowerLabel;
 
-    // FormerlySerializedAs keeps the label that used to show the shared team total wired up:
-    // without it the rename would silently drop the existing inspector reference and the
-    // score would just stop appearing.
-    [Tooltip("The local player's own score, next to their health bar.")]
-    [FormerlySerializedAs("scoreText")]
-    [SerializeField] private TMP_Text localScoreText;
-
     [Header("Opponent (top-right)")]
     [Tooltip("Parent object for the opponent's bar. Hidden while playing solo.")]
     [SerializeField] private GameObject opponentRoot;
@@ -45,8 +38,13 @@ public class PlayerHUD : MonoBehaviour
     [SerializeField] private Image opponentHealthFill;
     [SerializeField] private TMP_Text opponentHealthText;
 
-    [Tooltip("The opponent's score. Lives inside opponentRoot so it hides with them.")]
-    [SerializeField] private TMP_Text opponentScoreText;
+    [Header("Score")]
+    // FormerlySerializedAs keeps the existing inspector wiring: this label has been through a
+    // rename to localScoreText and back, and without it Unity would silently drop the
+    // reference and the score would just stop appearing.
+    [Tooltip("The shared team score, fed only by collecting energy orbs. Both players see the same number.")]
+    [FormerlySerializedAs("localScoreText")]
+    [SerializeField] private TMP_Text scoreText;
 
     [Header("Game over")]
     [Tooltip("Shown in the centre of the screen once every player is dead. Starts inactive.")]
@@ -69,9 +67,7 @@ public class PlayerHUD : MonoBehaviour
     private NetworkRunner runner;
     private PlayerHealth localHealth;
     private PlayerAbility localAbility;
-    private PlayerScore localScore;
     private PlayerHealth opponentHealth;
-    private PlayerScore opponentScore;
 
     // Unscaled so the readout keeps ticking regardless of what Time.timeScale is doing.
     private float nextPingRefreshTime;
@@ -196,7 +192,6 @@ public class PlayerHUD : MonoBehaviour
         // these must end up null so the panel hides instead of drawing a despawned player.
         localHealth = null;
         localAbility = null;
-        localScore = null;
 
         // PlayerSpawner calls SetPlayerObject after every successful spawn, which is what
         // makes this lookup work. Until then it returns null and the panel stays hidden.
@@ -209,7 +204,6 @@ public class PlayerHUD : MonoBehaviour
 
         localObject.TryGetComponent(out localHealth);
         localObject.TryGetComponent(out localAbility);
-        localObject.TryGetComponent(out localScore);
     }
 
     private void ResolveOpponent()
@@ -220,7 +214,6 @@ public class PlayerHUD : MonoBehaviour
         }
 
         opponentHealth = null;
-        opponentScore = null;
 
         foreach (PlayerRef player in runner.ActivePlayers)
         {
@@ -238,9 +231,6 @@ public class PlayerHUD : MonoBehaviour
 
             if (opponentObject.TryGetComponent(out opponentHealth))
             {
-                // Picked up together with the health so the two can never drift apart - the
-                // liveness check above re-resolves both at once when the opponent leaves.
-                opponentObject.TryGetComponent(out opponentScore);
                 return;
             }
         }
@@ -324,15 +314,15 @@ public class PlayerHUD : MonoBehaviour
     /// </summary>
     private void UpdateScore()
     {
-        if (localScoreText != null)
+        if (scoreText == null)
         {
-            localScoreText.text = $"Score : {(localScore.IsLive() ? localScore.Score : 0)}";
+            return;
         }
 
-        if (opponentScoreText != null)
-        {
-            opponentScoreText.text = $"Score : {(opponentScore.IsLive() ? opponentScore.Score : 0)}";
-        }
+        // Instance is null until the arena's GameStateManager has spawned.
+        GameStateManager gameState = GameStateManager.Instance;
+
+        scoreText.text = $"Score : {(gameState != null ? gameState.TeamScore : 0)}";
     }
 
     /// <summary>
