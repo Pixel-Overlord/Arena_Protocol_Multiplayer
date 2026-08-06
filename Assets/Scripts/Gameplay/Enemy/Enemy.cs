@@ -2,7 +2,10 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Host-authoritative enemy AI: Idle -> Patrol -> Chase -> Attack -> Dead.
+/// Host-authoritative enemy AI: Patrol -> Chase -> Attack -> Dead.
+///
+/// Patrol doubles as the "return home" behaviour: its waypoints are drawn around the enemy's
+/// spawn position, so giving up a chase walks it back to where it started.
 ///
 /// All decisions run on the state authority only. Clients never simulate the AI; they see
 /// the result through NetworkTransform (position/rotation) and the [Networked] State
@@ -16,7 +19,6 @@ public class Enemy : NetworkBehaviour, IDamageable
 {
     public enum EnemyState
     {
-        Idle,
         Patrol,
         Chase,
         Attack,
@@ -31,7 +33,7 @@ public class Enemy : NetworkBehaviour, IDamageable
     [Tooltip("Who this enemy locked onto. Replicated purely so the state can be inspected from a client while debugging.")]
     [Networked] private PlayerRef targetPlayer { get; set; }
 
-    [Tooltip("Doubles as the idle dwell timer and the patrol give-up timer, since an enemy is only ever in one of those states at a time.")]
+    [Tooltip("Patrol give-up timer, so an unreachable patrol point cannot strand the enemy forever.")]
     [Networked] private TickTimer stateTimer { get; set; }
 
     [Header("Ranges")]
@@ -54,9 +56,6 @@ public class Enemy : NetworkBehaviour, IDamageable
     [SerializeField] private float arriveDistance = 0.5f;
 
     [Header("Timing")]
-    [SerializeField] private float minIdleSeconds = 1f;
-    [SerializeField] private float maxIdleSeconds = 2f;
-
     [Tooltip("Give up on a patrol point after this long, in case it ended up somewhere unreachable.")]
     [SerializeField] private float patrolTimeoutSeconds = 8f;
 
@@ -92,7 +91,7 @@ public class Enemy : NetworkBehaviour, IDamageable
         currentHealth = maxHealth;
         targetPlayer = PlayerRef.None;
 
-        EnterIdle();
+        EnterPatrol();
     }
 
     public override void FixedUpdateNetwork()
@@ -105,7 +104,7 @@ public class Enemy : NetworkBehaviour, IDamageable
         }
 
         // Match over - the arena freezes. Returning before the state machine leaves each
-        // enemy standing exactly where it was, rather than snapping to Idle.
+        // enemy standing exactly where it was, rather than resuming its patrol.
         if (GameStateManager.IsMatchOver)
         {
             return;
@@ -120,10 +119,6 @@ public class Enemy : NetworkBehaviour, IDamageable
 
         switch (State)
         {
-            case EnemyState.Idle:
-                TickIdle(target, inChaseRange);
-                break;
-
             case EnemyState.Patrol:
                 TickPatrol(target, inChaseRange);
                 break;
@@ -141,26 +136,9 @@ public class Enemy : NetworkBehaviour, IDamageable
     #region States
 
     /// <summary>
-    /// Spawned and standing still. Waits out a short dwell, then starts wandering -
-    /// unless a player walks into range first.
-    /// </summary>
-    private void TickIdle(PlayerHealth target, bool inChaseRange)
-    {
-        if (inChaseRange)
-        {
-            EnterChase(target);
-            return;
-        }
-
-        if (stateTimer.ExpiredOrNotRunning(Runner))
-        {
-            EnterPatrol();
-        }
-    }
-
-    /// <summary>
-    /// Wandering to a random point near the spawn position. Chasing always wins over
-    /// patrolling, so the range check comes first.
+    /// Wandering between random points near the spawn position, which is also what brings an
+    /// enemy back home after it gives up a chase. Chasing always wins over patrolling, so the
+    /// range check comes first.
     /// </summary>
     private void TickPatrol(PlayerHealth target, bool inChaseRange)
     {
@@ -179,9 +157,11 @@ public class Enemy : NetworkBehaviour, IDamageable
 
         bool arrived = toPatrolTarget.sqrMagnitude <= arriveDistance * arriveDistance;
 
+        // Arriving picks the next point rather than stopping, so patrol is a continuous
+        // wander. The timer covers a point that turned out to be unreachable.
         if (arrived || stateTimer.ExpiredOrNotRunning(Runner))
         {
-            EnterIdle();
+            EnterPatrol();
         }
     }
 
@@ -241,13 +221,6 @@ public class Enemy : NetworkBehaviour, IDamageable
     #endregion
 
     #region Transitions
-
-    private void EnterIdle()
-    {
-        State = EnemyState.Idle;
-        targetPlayer = PlayerRef.None;
-        stateTimer = TickTimer.CreateFromSeconds(Runner, Random.Range(minIdleSeconds, maxIdleSeconds));
-    }
 
     private void EnterPatrol()
     {

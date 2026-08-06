@@ -154,7 +154,15 @@ public class GameStateManager : NetworkBehaviour
             return;
         }
 
-        if (aliveCount == 0)
+        // Per the GDD the match ends the moment one player goes down - this is a co-op run that
+        // both players either survive or lose together, not a last-man-standing mode.
+        bool someoneDied = aliveCount < playerObjectCount;
+
+        // Kept from the previous rule: if everybody disconnects mid-match the loop would
+        // otherwise sit in InProgress forever with no players left to die.
+        bool everyoneLeft = playerObjectCount == 0;
+
+        if (someoneDied || everyoneLeft)
         {
             State = MatchState.Ended;
             return;
