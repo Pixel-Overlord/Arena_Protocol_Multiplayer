@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 4501325249631698661}
   - component: {fileID: 8097791370550999282}
   - component: {fileID: 8919124574600703232}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -122,7 +122,7 @@ GameObject:
   - component: {fileID: 2179167283393287468}
   - component: {fileID: 5222173411646772121}
   - component: {fileID: 5600525790582512206}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -277,6 +277,10 @@ MonoBehaviour:
   cooldownSeconds: 4
   healPerSecond: 15
   healRadius: 3
+  glowRenderer: {fileID: 0}
+  shieldColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+  healSelfColor: {r: 0.2, g: 1, b: 0.4, a: 1}
+  healSharedColor: {r: 1, g: 0.9, b: 0.3, a: 1}
 --- !u!114 &5600525790582512206
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -302,7 +306,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 4759336049034736159}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: ProjectileLaunch
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -318,7 +322,7 @@ Transform:
   m_GameObject: {fileID: 1777222714122041518}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.003, z: 1.11}
+  m_LocalPosition: {x: -0.373, y: 0.035, z: 1.11}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -336,7 +340,7 @@ GameObject:
   - component: {fileID: 5217542822194719163}
   - component: {fileID: 8438921440450532993}
   - component: {fileID: 3631117515591235106}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Capsule
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -444,7 +448,7 @@ GameObject:
   - component: {fileID: 5448608261786040045}
   - component: {fileID: 8937912143308467172}
   - component: {fileID: 2194356744011174504}
-  m_Layer: 0
+  m_Layer: 6
   m_Name: Cylinder
   m_TagString: Untagged
   m_Icon: {fileID: 0}

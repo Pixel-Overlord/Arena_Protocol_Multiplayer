@@ -584,8 +584,8 @@ GameObject:
   - component: {fileID: 541138864}
   - component: {fileID: 541138863}
   - component: {fileID: 541138865}
-  - component: {fileID: 541138867}
   - component: {fileID: 541138866}
+  - component: {fileID: 541138867}
   m_Layer: 0
   m_Name: FusionBootstrap
   m_TagString: Untagged
@@ -657,10 +657,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 541138862}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 10533623ed629624c8acc6869f609bf2, type: 3}
+  m_Script: {fileID: 11500000, guid: d90d421f1e6a39b47a9944d2a03cbc23, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   DelayIfSceneManagerIsBusy: 1
+  maxPooledPerPrefab: 32
+  logPoolActivity: 0
 --- !u!1 &687463063
 GameObject:
   m_ObjectHideFlags: 0

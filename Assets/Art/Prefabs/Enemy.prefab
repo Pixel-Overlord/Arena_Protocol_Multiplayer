@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 7952468481705291647}
   - component: {fileID: 805168250102742523}
   - component: {fileID: 7178821635689800802}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Enemy Gun
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -107,6 +107,37 @@ CapsuleCollider:
   m_Height: 2
   m_Direction: 1
   m_Center: {x: 0.000000059604645, y: 0, z: -0.00000008940697}
+--- !u!1 &1229400347417341277
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4875001349050420730}
+  m_Layer: 7
+  m_Name: Fire Position Point
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4875001349050420730
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1229400347417341277}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.44, y: 0, z: 0.84}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 6199245835230658788}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &3443927933474798804
 GameObject:
   m_ObjectHideFlags: 0
@@ -117,7 +148,10 @@ GameObject:
   m_Component:
   - component: {fileID: 6199245835230658788}
   - component: {fileID: 2293495863820747575}
-  m_Layer: 0
+  - component: {fileID: 6182267141329209222}
+  - component: {fileID: 3344496973117143041}
+  - component: {fileID: 2903215711748074434}
+  m_Layer: 7
   m_Name: Enemy
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -139,6 +173,7 @@ Transform:
   m_Children:
   - {fileID: 7017305389531049226}
   - {fileID: 1114619448248894268}
+  - {fileID: 4875001349050420730}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &2293495863820747575
@@ -156,10 +191,94 @@ MonoBehaviour:
   SortKey: 503936024
   SendPriority: 1
   EnableInterpolation: 1
-  Flags: 262146
+  Flags: 262402
   NestedObjects: []
-  NetworkedBehaviours: []
+  NetworkedBehaviours:
+  - {fileID: 6182267141329209222}
+  - {fileID: 3344496973117143041}
+  - {fileID: 2903215711748074434}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &6182267141329209222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3443927933474798804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 158639473, guid: e725a070cec140c4caffb81624c8c787, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _stateAuthorityChangeErrorCorrectionDelta: 0
+  SyncScale: 0
+  SyncParent: 0
+  _autoAOIOverride: 1
+  ConfigFlags: 0
+  PhysicsSettings:
+    ForecastEnabled: 1
+    DebugPhysics: 0
+    GravityForecast: 2
+    MaxExtrapolationTime: 0.15
+    MinLinearDetectedError: 0.02
+    MinAngularDetectedError: 3
+    MaxLinearError: 0
+    MaxAngularError: 0
+    LowCorrectionProgressThreshold: 0.015
+    HighErrorSimilarityThreshold: 1
+    MaxErrorTotalTime: 0.5
+    MaxRemoteSleepIgnoreTime: 0.5
+    ErrorCorrectionType: 0
+    LinearVelCorrectionMul: 1
+    AngularVelCorrectionMul: 1
+    PositionCorrectionLerp: 0.15
+    RotationCorrectionLerp: 0.15
+    Spring: 75
+    Damper: 2
+    MinImpactfulCollisionAlignment: 0.3
+    ImpactStartCorrectionTime: 0.1
+    ImpactCorrectionTimeComplete: 0.3
+--- !u!114 &3344496973117143041
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3443927933474798804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 21054118a71cac244bb5cedd1e5b0a30, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enemyProjectilePrefab:
+    RawGuidValue: c93abad05e267954e9af92286e2565fe
+  firePositionPoint: {fileID: 4875001349050420730}
+  fireRate: 1.5
+  aimHeightOffset: 1
+--- !u!114 &2903215711748074434
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3443927933474798804}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: df4857066498eff4ca76af3edd441de7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _State: 0
+  _currentHealth: 0
+  chaseRange: 12
+  attackRange: 5
+  moveSpeed: 3
+  turnSpeedDegrees: 360
+  patrolRadius: 15
+  arriveDistance: 0.5
+  minIdleSeconds: 1
+  maxIdleSeconds: 2
+  patrolTimeoutSeconds: 8
+  maxHealth: 30
 --- !u!1 &6424822607311086508
 GameObject:
   m_ObjectHideFlags: 0
@@ -172,7 +291,7 @@ GameObject:
   - component: {fileID: 1250709004280633586}
   - component: {fileID: 8542091870175791726}
   - component: {fileID: 165587085779865632}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -277,7 +396,7 @@ GameObject:
   - component: {fileID: 6581932464099167826}
   - component: {fileID: 7529550103716213525}
   - component: {fileID: 8391960830229407659}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Capsule
   m_TagString: Untagged
   m_Icon: {fileID: 0}

@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 7310557699507227229}
   - component: {fileID: 4653421398087870339}
   - component: {fileID: 4727785018925169192}
-  m_Layer: 8
+  m_Layer: 9
   m_Name: Sphere
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -144,8 +144,8 @@ GameObject:
   - component: {fileID: 2073648710994606971}
   - component: {fileID: 7099962067844843887}
   - component: {fileID: 5043280457949766690}
-  m_Layer: 8
-  m_Name: Projectile
+  m_Layer: 9
+  m_Name: Enemy Projectile
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -179,7 +179,7 @@ MonoBehaviour:
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  SortKey: 927447712
+  SortKey: 3365023112
   SendPriority: 1
   EnableInterpolation: 1
   Flags: 262146
