@@ -2,13 +2,10 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// The enemy's gun. Same shape as the player's Weapon, but driven by Enemy's Attack state
-/// instead of by network input - an enemy has no input authority and receives no
-/// NetworkInputData, so there is nothing to read in FixedUpdateNetwork.
-///
-/// Owning the cooldown here rather than in Enemy means Enemy can call TryFire every tick
-/// and let the weapon decide whether a shot is actually due.
+/// Handles enemy projectile firing, managing cooldowns and targeting logic in a networked environment.
 /// </summary>
+/// <remarks>Ensures projectiles are spawned only by the state authority, respects match state, and adjusts aim to
+/// account for player pivot offsets. Integrates with Fusion networking for authoritative shot spawning.</remarks>
 public class EnemyWeapon : NetworkBehaviour
 {
     [Tooltip("The enemy projectile prefab. Must be registered in the Fusion prefab table.")]
@@ -38,8 +35,6 @@ public class EnemyWeapon : NetworkBehaviour
             return false;
         }
 
-        // Defensive: Enemy already stops calling this once the match ends, but a shot
-        // spawned after GAME OVER would be the one thing still moving.
         if (GameStateManager.IsMatchOver)
         {
             return false;
@@ -59,8 +54,6 @@ public class EnemyWeapon : NetworkBehaviour
         Vector3 aimPoint = targetPosition + Vector3.up * aimHeightOffset;
         Vector3 toTarget = aimPoint - firePositionPoint.position;
 
-        // Degenerate case: the muzzle is exactly on the aim point. LookRotation would warn
-        // and return an arbitrary rotation, so skip the shot instead.
         if (toTarget.sqrMagnitude < 0.0001f)
         {
             return false;
@@ -70,8 +63,6 @@ public class EnemyWeapon : NetworkBehaviour
         // into the spawn rotation rather than passed to the projectile separately.
         Quaternion aimRotation = Quaternion.LookRotation(toTarget.normalized, Vector3.up);
 
-        // inputAuthority is null: no player owns this shot. firedByEnemy is what tells the
-        // projectile whom it may hurt - see Projectile.OnTriggerEnter.
         Runner.Spawn(
             enemyProjectilePrefab,
             firePositionPoint.position,

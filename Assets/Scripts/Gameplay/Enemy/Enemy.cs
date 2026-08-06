@@ -2,18 +2,10 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Host-authoritative enemy AI: Patrol -> Chase -> Attack -> Dead.
-///
-/// Patrol doubles as the "return home" behaviour: its waypoints are drawn around the enemy's
-/// spawn position, so giving up a chase walks it back to where it started.
-///
-/// All decisions run on the state authority only. Clients never simulate the AI; they see
-/// the result through NetworkTransform (position/rotation) and the [Networked] State
-/// property. That keeps both peers in agreement without a single RPC.
-///
-/// Detection is pure Vector3 maths - no NavMesh, no physics overlap queries - so ranges are
-/// straight line-of-sight distances on the arena floor.
+/// Represents an enemy character that patrols, chases, and attacks players in a networked multiplayer environment.
 /// </summary>
+/// <remarks>Handles state transitions, health management, and network synchronization for enemy AI behavior.
+/// Integrates with the game state manager and supports debugging through replicated state properties.</remarks>
 [RequireComponent(typeof(EnemyWeapon))]
 public class Enemy : NetworkBehaviour, IDamageable
 {
@@ -344,10 +336,9 @@ public class Enemy : NetworkBehaviour, IDamageable
     #endregion
 
     /// <summary>
-    /// IDamageable - called by Projectile when a player's shot lands.
-    /// On death the enemy is despawned, which routes through PooledNetworkObjectProvider
-    /// and parks the instance for reuse rather than destroying it.
+    /// Reduces the enemy's health by the specified amount and handles death state transitions.
     /// </summary>
+    /// <param name="damageAmount">The amount of damage to subtract from the enemy's current health.</param>
     public void applyDamage(float damageAmount)
     {
         if (!Object.HasStateAuthority || State == EnemyState.Dead)

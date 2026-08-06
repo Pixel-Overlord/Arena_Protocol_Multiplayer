@@ -7,13 +7,11 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Owns the network session end to end: starting it, feeding it local input, driving player
-/// spawn/despawn, and returning the player to the menu when the connection drops.
-///
-/// It is also the only place raw Unity Input is read for gameplay purposes - everything
-/// else reads the replicated NetworkInputData instead, which is what keeps input consistent
-/// under resimulation.
+/// Manages the networked game session lifecycle, including player connections, disconnections, and session state.
+/// Implements INetworkRunnerCallbacks to handle network events and coordinates scene transitions and player state
+/// persistence.
 /// </summary>
+/// <remarks>Uses a singleton pattern to ensure only one active instance persists across scene loads.</remarks>
 public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 {
     public static FusionBootstrap Instance { get; private set; }
@@ -25,12 +23,7 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
     [Tooltip("Scene to load after successfully creating or joining a session.")]
     [SerializeField] private SceneRef arenaScene;
 
-    // Why the player was sent back to the menu. Held until MenuUI reads it, because the
-    // menu scene does not exist yet at the moment the session ends.
     private string statusMessageForMenu;
-
-    // Latched once the session is over. This bootstrap's NetworkRunner is single-use, so it
-    // can never host another game - a replacement arrives with the reloaded menu scene.
     private bool sessionEnded;
 
     /// <summary>
@@ -40,16 +33,11 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
     public PlayerStateStore PlayerStates { get; } = new PlayerStateStore();
 
     /// <summary>
-    /// Takes over as the live bootstrap, replacing any earlier one.
-    ///
-    /// This is the usual singleton pattern turned around: normally the newcomer destroys
-    /// itself, but here the newcomer wins. A NetworkRunner cannot be restarted once it has
-    /// shut down, and a reloaded Menu scene is the only place a fresh one appears - so the
-    /// stale bootstrap and its dead runner are what have to go.
-    ///
-    /// Destroying the old object also runs PooledNetworkObjectProvider.OnDestroy, releasing
-    /// everything the finished session had parked.
+    /// Initializes the singleton instance, preserves status messages across scene loads, and ensures the object
+    /// persists between scenes.
     /// </summary>
+    /// <remarks>Called when the script instance is loaded. Ensures only one instance exists and retrieves the
+    /// NetworkRunner component.</remarks>
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -84,9 +72,6 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 
     private async Task StartGame(GameMode mode, string roomName)
     {
-        // This bootstrap has already spent its runner. Should be unreachable - the menu
-        // that could click the button is always a freshly loaded one - but a silent no-op
-        // here is better than Fusion throwing.
         if (sessionEnded)
         {
             Debug.LogWarning("FusionBootstrap: this session has already ended.");
@@ -131,13 +116,6 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 
             return;
         }
-
-        // The region is worth printing because Photon rooms are per-region: a host in one
-        // region is completely invisible to a client that picked another, and the client
-        // just gets "GameNotFound" as though the room had never existed. With Best Region
-        // selection each launch re-pings and can land somewhere different, so this is the
-        // first thing to compare between two peers that cannot see each other.
-        Debug.Log($"Started {mode} in session '{runner.SessionInfo.Name}' on region '{runner.SessionInfo.Region}'.");
     }
 
     /// <summary>
