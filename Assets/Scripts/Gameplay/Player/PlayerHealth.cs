@@ -8,7 +8,7 @@ using UnityEngine;
 /// 
 /// This is one shared place to read/write Health and Death for every class (Projectile, Shield, Heal).
 /// </summary>
-public class PlayerHealth : NetworkBehaviour
+public class PlayerHealth : NetworkBehaviour, IDamageable
 {
     [Tooltip("Current HP/Health of player.")]
     [Networked] public float currentHealth { get; set; }
@@ -17,6 +17,14 @@ public class PlayerHealth : NetworkBehaviour
     [Networked] public NetworkBool isDead { get; set; }
 
     [SerializeField] private float maxHealth = 100f;
+
+    // IDamageable wants a plain bool; isDead is a NetworkBool, which is a struct with an
+    // implicit conversion, so this bridges the two without changing how isDead is stored.
+    public bool IsDead => isDead;
+
+    // maxHealth is serialized and private. Exposing it read-only lets health bars and
+    // any future wave-scaling read the ceiling without being able to move it.
+    public float MaxHealth => maxHealth;
 
     /// <summary>
     /// This function sets the Health to its maxHealth when spawned.

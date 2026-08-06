@@ -18,6 +18,20 @@ public class PlayerSpawner : MonoBehaviour
 
     [SerializeField] private Transform[] spawnPoints;
 
+    // Cached rather than searched per spawn - FindObjectOfType is expensive and this runs
+    // on the join path. Assigned in Awake because both objects live in the arena scene.
+    private GameStateManager gameStateManager;
+
+    private void Awake()
+    {
+        gameStateManager = FindObjectOfType<GameStateManager>();
+
+        if (gameStateManager == null)
+        {
+            Debug.LogWarning("PlayerSpawner: no GameStateManager in the arena, enemies will never spawn.", this);
+        }
+    }
+
     public void SpawnPlayer(NetworkRunner runner, PlayerRef player)
     {
         // Only the state authority is allowed to spawn networked objects.
@@ -50,6 +64,13 @@ public class PlayerSpawner : MonoBehaviour
         runner.SetPlayerObject(player, playerObject);
 
         playerObject.GetComponent<PlayerAbility>().Type = UnityEngine.Random.Range(0, 2) == 0 ? PlayerAbility.AbilityType.Shield : PlayerAbility.AbilityType.Heal;
+
+        // Reported only after the spawn actually succeeded, so a failed spawn can't be
+        // counted towards the "everyone has arrived" check that releases the first wave.
+        if (gameStateManager != null)
+        {
+            gameStateManager.NotifyPlayerSpawned(runner);
+        }
     }
 
     public void DespawnPlayer(NetworkRunner runner, PlayerRef player)
