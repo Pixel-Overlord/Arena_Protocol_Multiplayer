@@ -181,13 +181,7 @@ Assets/Scripts/
 ## Engineering tradeoffs
 
 **No host migration.** If the host quits, the session ends and every client is returned to the
-menu with an explanation. Supporting migration would mean transferring authority over every
-enemy, orb and match-state object mid-flight — a large amount of work and the hardest thing in
-the project to test, for a scenario a two-player demo can reasonably declare out of scope.
-
-**Fixed region rather than best-region.** Costs a little latency for players far from the chosen
-region, but removes an entire class of intermittent "room not found" failures. For something
-graded by someone I cannot watch, predictable beats optimal.
+menu.
 
 **Scoring comes only from orbs.** Killing enemies awards nothing. This keeps a single scoring
 rule that is trivial to explain, and makes orbs worth breaking cover for rather than a sideshow
@@ -198,9 +192,8 @@ saying whether Heal is self-only. Since the match ends the moment either player 
 teammate alive is the whole point of the ability — a self-only Heal would be strictly worse than
 Shield and the two would stop being complementary.
 
-**Enemies patrol continuously with no idle pause.** An earlier version had an `Idle` dwell state,
-removed to match the GDD's four states exactly. "Return to spawn" is expressed through patrol —
-waypoints are drawn around each enemy's spawn position, so giving up a chase walks it home.
+**Enemies patrol continuously with no idle pause.** Implemented an 'Idle' state for Enemies previously.
+However removed it as per the GDD.
 
 **No respawn.** A player who dies stays dead, which follows from the match ending on the first
 death. A player who dies and *then* reconnects comes back alive at full health, because
@@ -209,10 +202,6 @@ restoring them dead would hand back a character they could never play.
 **The two ping readouts measure different things.** The client shows its round trip to the host.
 The host is the server, so its round trip to itself is zero and useless — it shows its trip to
 the Photon relay instead. The client's figure therefore contains the host's.
-
-**Enemies use distance maths, not NavMesh.** Ranges are straight line-of-sight distances on the
-arena floor. Enemies will walk into obstacles rather than around them, which is acceptable in an
-open arena and avoids baking navigation for primitive geometry.
 
 ---
 
