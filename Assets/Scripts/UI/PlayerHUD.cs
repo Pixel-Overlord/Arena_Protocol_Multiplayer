@@ -52,6 +52,13 @@ public class PlayerHUD : MonoBehaviour
     [Tooltip("Shown in the centre of the screen once every player is dead. Starts inactive.")]
     [SerializeField] private GameObject gameOverRoot;
 
+    [Header("Connection")]
+    [Tooltip("Shows this peer's own round trip time to the host. Each player sees their own number, not the other player's.")]
+    [SerializeField] private TMP_Text pingText;
+
+    [Tooltip("How often the ping readout refreshes. Refreshing every frame makes the number flicker unreadably and builds a new string each time.")]
+    [SerializeField] private float pingRefreshInterval = 0.25f;
+
     [Header("Colours")]
     [SerializeField] private Color shieldColor = new Color(0.2f, 0.6f, 1f);
     [SerializeField] private Color healColor = new Color(0.2f, 1f, 0.4f);
@@ -65,6 +72,9 @@ public class PlayerHUD : MonoBehaviour
     private PlayerScore localScore;
     private PlayerHealth opponentHealth;
     private PlayerScore opponentScore;
+
+    // Unscaled so the readout keeps ticking regardless of what Time.timeScale is doing.
+    private float nextPingRefreshTime;
 
     private void Update()
     {
@@ -82,7 +92,67 @@ public class PlayerHUD : MonoBehaviour
         UpdateLocalPanel();
         UpdateOpponentPanel();
         UpdateScore();
+        UpdatePing();
         UpdateGameOver();
+    }
+
+    /// <summary>
+    /// Shows this peer's own round trip time to the host.
+    ///
+    /// Deliberately the local player's ping only. A peer can measure its own connection but
+    /// not another client's - only the host can see everyone's - so showing "your ping on
+    /// your screen" is the one reading that is both meaningful and symmetric.
+    /// </summary>
+    private void UpdatePing()
+    {
+        if (pingText == null || Time.unscaledTime < nextPingRefreshTime)
+        {
+            return;
+        }
+
+        nextPingRefreshTime = Time.unscaledTime + pingRefreshInterval;
+
+        // The runner GameObject is DontDestroyOnLoad and exists from the menu scene onward,
+        // so TryResolveRunner finding it says nothing about whether a session is actually
+        // up. GetPlayerRtt reaches into connection state that does not exist before then and
+        // throws a NullReferenceException from inside Fusion if it is missing.
+        if (!runner.IsRunning)
+        {
+            pingText.text = "Ping : --";
+            return;
+        }
+
+        // The host IS the game server, so asking for its round trip to itself returns zero -
+        // true, but useless. The latency that actually costs the host something is the hop
+        // out to the Photon cloud that relays traffic to the client, so show that instead.
+        //
+        // Worth knowing when reading the two screens side by side: they measure different
+        // legs. The client's number is its trip to the host, which already contains this one.
+        if (runner.IsServer)
+        {
+            pingText.text = $"Ping : {ToMilliseconds(runner.GetRttToPhotonCloud().average)} ms";
+            return;
+        }
+
+        // A client mid-handshake has no round trip to report yet: LocalPlayer stays invalid
+        // until the host has accepted it, and asking for the RTT of an invalid player is
+        // what produces the null dereference.
+        if (!runner.IsConnectedToServer || !runner.LocalPlayer.IsRealPlayer)
+        {
+            pingText.text = "Ping : --";
+            return;
+        }
+
+        pingText.text = $"Ping : {ToMilliseconds(runner.GetPlayerRtt(runner.LocalPlayer))} ms";
+    }
+
+    /// <summary>
+    /// Fusion reports every round trip time in seconds. A ping readout is far easier to
+    /// judge in whole milliseconds, so both call sites above convert through here.
+    /// </summary>
+    private static int ToMilliseconds(double seconds)
+    {
+        return (int)System.Math.Round(seconds * 1000.0);
     }
 
     /// <summary>
