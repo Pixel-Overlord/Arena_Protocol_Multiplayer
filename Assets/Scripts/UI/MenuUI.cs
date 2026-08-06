@@ -12,9 +12,23 @@ public class MenuUI : MonoBehaviour
 
     private const string DefaultRoomName = "ArenaRoom";
 
-    private void Awake()
+    /// <summary>
+    /// Puts the menu into a usable state and shows why the last session ended, if it ended
+    /// for a reason worth mentioning.
+    ///
+    /// Deliberately Start and not Awake: the bootstrap that survived the last session hands
+    /// over to a fresh one during Awake, and only by Start is FusionBootstrap.Instance
+    /// guaranteed to be the new one holding the message.
+    /// </summary>
+    private void Start()
     {
-        SetStatus(string.Empty);
+        SetInteractable(true);
+
+        string message = FusionBootstrap.Instance != null
+            ? FusionBootstrap.Instance.ConsumeStatusMessage()
+            : null;
+
+        SetStatus(message ?? string.Empty);
     }
 
     public void OnHostClicked()

@@ -41,11 +41,17 @@ public class PlayerSpawner : MonoBehaviour
         }
 
         // Guard against being asked twice for the same player.
-        if (runner.GetPlayerObject(player) != null)
+        //
+        // IsLive rather than a null check, and it matters here: a despawned player object is
+        // parked by the pool rather than destroyed, so a stale one being handed back would
+        // make this bail out and a rejoining player would never spawn at all.
+        if (runner.GetPlayerObject(player).IsLive())
         {
             return;
         }
 
+        // Position always comes from a spawn point, even for a returning player: dropping
+        // someone back where they vanished can rematerialise them inside a live wave.
         Transform spawnPoint = GetSpawnPoint(player);
         NetworkObject playerObject = runner.Spawn(
             playerPrefab,
@@ -63,13 +69,111 @@ public class PlayerSpawner : MonoBehaviour
         // again - without this GetPlayerObject always returns null.
         runner.SetPlayerObject(player, playerObject);
 
-        playerObject.GetComponent<PlayerAbility>().Type = UnityEngine.Random.Range(0, 2) == 0 ? PlayerAbility.AbilityType.Shield : PlayerAbility.AbilityType.Heal;
+        // Applied after Spawn rather than inside it: Spawned() resets health and score, so
+        // anything written earlier would be overwritten.
+        ApplyInitialState(runner, player, playerObject);
 
         // Reported only after the spawn actually succeeded, so a failed spawn can't be
         // counted towards the "everyone has arrived" check that releases the first wave.
         if (gameStateManager != null)
         {
             gameStateManager.NotifyPlayerSpawned(runner);
+        }
+    }
+
+    /// <summary>
+    /// Sets up a newly spawned player: either everything they disconnected with, or - for
+    /// someone the host has never seen - whichever ability the other player is not using.
+    /// </summary>
+    private void ApplyInitialState(NetworkRunner runner, PlayerRef player, NetworkObject playerObject)
+    {
+        PlayerStateStore savedStates = GetSavedStates();
+
+        if (savedStates != null && savedStates.TryTake(runner, player, out SavedPlayerState savedState))
+        {
+            RestoreReturningPlayer(playerObject, savedState);
+            return;
+        }
+
+        // Nobody the host recognises. Spawned() has already given them full health and a
+        // zero score, so the only thing left to decide is which ability they get.
+        if (playerObject.TryGetComponent(out PlayerAbility ability))
+        {
+            AssignComplementaryAbility(runner, player, ability);
+        }
+    }
+
+    /// <summary>
+    /// Gives a new player whichever ability nobody else is currently holding, so a two-player
+    /// match always fields one Shield and one Heal rather than risking two of the same.
+    ///
+    /// Falls back to a coin flip when there is nothing to complement: the first player into
+    /// the arena, or the case where both abilities are somehow already represented.
+    ///
+    /// Runs after runner.Spawn, so the joining player is already in ActivePlayers and has to
+    /// be skipped explicitly - otherwise they would be complementing themselves.
+    /// </summary>
+    private void AssignComplementaryAbility(NetworkRunner runner, PlayerRef newPlayer, PlayerAbility ability)
+    {
+        bool shieldTaken = false;
+        bool healTaken = false;
+
+        foreach (PlayerRef player in runner.ActivePlayers)
+        {
+            if (player == newPlayer)
+            {
+                continue;
+            }
+
+            NetworkObject playerObject = runner.GetPlayerObject(player);
+
+            if (!playerObject.IsLive() || !playerObject.TryGetComponent(out PlayerAbility otherAbility))
+            {
+                continue;
+            }
+
+            if (otherAbility.Type == PlayerAbility.AbilityType.Shield)
+            {
+                shieldTaken = true;
+            }
+            else
+            {
+                healTaken = true;
+            }
+        }
+
+        // Exactly one is spoken for, so the choice makes itself.
+        if (shieldTaken != healTaken)
+        {
+            ability.AssignAbility(shieldTaken
+                ? PlayerAbility.AbilityType.Heal
+                : PlayerAbility.AbilityType.Shield);
+
+            return;
+        }
+
+        ability.AssignRandomAbility();
+    }
+
+    /// <summary>
+    /// Puts back everything a rejoining player left with: health, score, and the ability
+    /// they had along with its remaining duration and cooldown.
+    /// </summary>
+    private void RestoreReturningPlayer(NetworkObject playerObject, SavedPlayerState savedState)
+    {
+        if (playerObject.TryGetComponent(out PlayerHealth health))
+        {
+            health.RestoreState(savedState);
+        }
+
+        if (playerObject.TryGetComponent(out PlayerScore score))
+        {
+            score.RestoreState(savedState);
+        }
+
+        if (playerObject.TryGetComponent(out PlayerAbility ability))
+        {
+            ability.RestoreState(savedState);
         }
     }
 
@@ -82,10 +186,59 @@ public class PlayerSpawner : MonoBehaviour
 
         NetworkObject playerObject = runner.GetPlayerObject(player);
 
-        if (playerObject != null)
+        // IsLive rather than a null check: capturing the snapshot below reads networked
+        // state, which throws on an object that has already been despawned and parked.
+        if (!playerObject.IsLive())
         {
-            runner.Despawn(playerObject);
+            return;
         }
+
+        // Snapshot before despawning - this is the last moment the state exists anywhere.
+        SaveStateForRejoin(runner, player, playerObject);
+
+        runner.Despawn(playerObject);
+    }
+
+    /// <summary>
+    /// Records a disconnecting player's health and score so a rejoin can restore them.
+    /// </summary>
+    private void SaveStateForRejoin(NetworkRunner runner, PlayerRef player, NetworkObject playerObject)
+    {
+        PlayerStateStore savedStates = GetSavedStates();
+
+        if (savedStates == null)
+        {
+            return;
+        }
+
+        SavedPlayerState state = default;
+
+        if (playerObject.TryGetComponent(out PlayerHealth health))
+        {
+            health.CaptureStateInto(ref state);
+        }
+
+        if (playerObject.TryGetComponent(out PlayerScore score))
+        {
+            score.CaptureStateInto(ref state);
+        }
+
+        if (playerObject.TryGetComponent(out PlayerAbility ability))
+        {
+            ability.CaptureStateInto(ref state);
+        }
+
+        savedStates.Save(runner, player, state);
+    }
+
+    /// <summary>
+    /// The host's snapshot store, or null if there is no bootstrap to ask. Null is a normal
+    /// outcome rather than an error - it just means nothing can be saved or restored, and
+    /// every spawn is treated as a brand new player.
+    /// </summary>
+    private PlayerStateStore GetSavedStates()
+    {
+        return FusionBootstrap.Instance != null ? FusionBootstrap.Instance.PlayerStates : null;
     }
 
     /// <summary>

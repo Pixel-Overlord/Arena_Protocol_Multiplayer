@@ -113,11 +113,29 @@ public class PooledNetworkObjectProvider : NetworkObjectProviderDefault
     }
 
     /// <summary>
-    /// Parked objects live in the runner scene and die with it, so on teardown the
-    /// dictionaries would otherwise hold destroyed references into a second session.
+    /// Releases everything this session pooled.
+    ///
+    /// Parked objects mostly die with the arena scene, but this component sits on a
+    /// DontDestroyOnLoad object, so anything parked after that unload outlives it as an
+    /// orphaned hidden GameObject. Destroying them here means a finished session leaves
+    /// nothing behind for the next one, and the dictionaries cannot hold destroyed
+    /// references into it either.
     /// </summary>
     private void OnDestroy()
     {
+        foreach (KeyValuePair<NetworkObject, Stack<NetworkObject>> pool in parked)
+        {
+            foreach (NetworkObject parkedInstance in pool.Value)
+            {
+                // Null-checked because a scene unload may already have taken some of these,
+                // and Unity's fake-null makes that invisible to a plain reference check.
+                if (parkedInstance != null)
+                {
+                    Destroy(parkedInstance.gameObject);
+                }
+            }
+        }
+
         parked.Clear();
         prefabOfInstance.Clear();
     }
