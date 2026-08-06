@@ -75,7 +75,7 @@ public class PlayerAbility : NetworkBehaviour
     public bool IsActive => Meter > 0f;
 
     /// <summary>
-    /// How full the power bar is, 0-1. Used directly as an Image.fillAmount.
+    /// How full the power bar is, 0-1.
     /// </summary>
     public float MeterNormalized
     {

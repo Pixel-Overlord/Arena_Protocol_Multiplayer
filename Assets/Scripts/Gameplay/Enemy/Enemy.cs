@@ -395,9 +395,13 @@ public class Enemy : NetworkBehaviour, IDamageable
 
         // Score is a shared team total, so no kill attribution is needed - whoever fired
         // the shot, the points go to the same place.
+        //
+        // Kept as two calls rather than one: score also comes from powerups later, which
+        // award points without a kill, so the wave counter must not be tied to scoring.
         if (GameStateManager.Instance != null)
         {
             GameStateManager.Instance.AddScore(scoreValue);
+            GameStateManager.Instance.NotifyEnemyKilled();
         }
 
         Runner.Despawn(Object);

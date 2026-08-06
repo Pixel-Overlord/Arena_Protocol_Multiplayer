@@ -2,14 +2,7 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Spawns the opening batch of enemies once GameStateManager says the match has started.
-///
-/// Deliberately shaped like PlayerSpawner: a plain MonoBehaviour living in Arena.unity,
-/// driven explicitly by another script rather than by Fusion callbacks, with an
-/// authority guard on every spawn.
-///
-/// "Returning to the pool" is just Runner.Despawn - PooledNetworkObjectProvider parks the
-/// instance instead of destroying it, so no extra bookkeeping belongs here.
+/// Spawns a wave of enemies.
 /// </summary>
 public class EnemySpawner : MonoBehaviour
 {
@@ -18,50 +11,76 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("Where enemies appear. Cycled through if there are fewer points than enemies.")]
     [SerializeField] private Transform[] enemySpawnPoints;
 
-    [Tooltip("How many enemies the first wave puts in the arena.")]
-    [SerializeField] private int initialEnemyCount = 5;
+    [Header("Wave sizing")]
+    [Tooltip("Initial number of Enemies.")]
+    [SerializeField] private int baseEnemyCount = 5;
 
-    [Tooltip("Random sideways offset applied around each spawn point so enemies sharing a point don't stack inside one another.")]
-    [SerializeField] private float spawnScatterRadius = 2f;
+    [Tooltip("Extra enemies added per wave.")]
+    [SerializeField] private int extraEnemiesPerWave = 2;
+
+    [Tooltip("Max number of Enemies per wave.")]
+    [SerializeField] private int maxEnemiesPerWave = 15;
 
     /// <summary>
-    /// Phase 1.2 - called once both players have reached the game.
+    /// Calculates the number of enemies in a wave based on the wave number, scaling from a base count and clamping to
+    /// the allowed range.
     /// </summary>
-    public void SpawnInitialWave(NetworkRunner runner)
+    /// <param name="waveNumber">The wave number used to determine the enemy count.</param>
+    /// <returns>The number of enemies for the specified wave</returns>
+    public int GetWaveSize(int waveNumber)
+    {
+        int size = baseEnemyCount + Mathf.Max(0, waveNumber - 1) * extraEnemiesPerWave;
+
+        return Mathf.Clamp(size, 1, Mathf.Max(1, maxEnemiesPerWave));
+    }
+
+    /// <summary>
+    /// Spawns one wave.
+    /// </summary>
+    /// <returns>
+    /// How many enemies actually in the arena.
+    /// </returns>
+    public int SpawnWave(NetworkRunner runner, int waveNumber)
     {
         // Only the state authority may spawn networked objects. Same guard as PlayerSpawner.
         if (!runner.IsServer)
         {
-            return;
+            return 0;
         }
 
         if (!enemyPrefab.IsValid)
         {
             Debug.LogError("EnemySpawner: no enemy prefab assigned.", this);
-            return;
+            return 0;
         }
 
-        for (int i = 0; i < initialEnemyCount; i++)
+        int waveSize = GetWaveSize(waveNumber);
+        int spawnedCount = 0;
+
+        for (int i = 0; i < waveSize; i++)
         {
             Transform spawnPoint = GetSpawnPoint(i);
-            Vector3 position = ScatterAround(spawnPoint.position);
-
-            // No input authority argument: enemies are host-driven AI and consume no
-            // player input, so the default (PlayerRef.None) is correct.
-            NetworkObject enemy = runner.Spawn(enemyPrefab, position, spawnPoint.rotation);
+            
+            NetworkObject enemy = runner.Spawn(enemyPrefab, spawnPoint.position, spawnPoint.rotation);
 
             if (enemy == null)
             {
-                Debug.LogError($"EnemySpawner: spawn returned null for enemy {i}.", this);
+                Debug.LogError($"EnemySpawner: spawn returned null for enemy {i} of wave {waveNumber}.", this);
+                continue;
             }
+
+            spawnedCount++;
         }
+
+        return spawnedCount;
     }
 
     /// <summary>
-    /// Optional warm-up: create and immediately release N instances so the pool is already
-    /// populated and the first real wave costs no Instantiate calls. Pure optimisation -
-    /// nothing breaks if this is never called.
+    /// Prepares the enemy object pool by spawning and immediately despawning the specified number of enemy instances on
+    /// the server.
     /// </summary>
+    /// <param name="runner">The network runner managing the networked game state.</param>
+    /// <param name="count">The number of enemy objects to prewarm in the pool.</param>
     public void PrewarmPool(NetworkRunner runner, int count)
     {
         if (!runner.IsServer)
@@ -82,10 +101,10 @@ public class EnemySpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// Cycles through the assigned points so N enemies spread across M spawn locations.
-    /// Mirrors PlayerSpawner.GetSpawnPoint, including its fallback so a missing array
-    /// can never null-reference.
+    /// Retrieves the spawn point transform corresponding to the specified index.
     /// </summary>
+    /// <param name="index">The index used to select a spawn point.</param>
+    /// <returns>The transform of the selected spawn point, or the spawner's own transform if no spawn points are assigned.</returns>
     private Transform GetSpawnPoint(int index)
     {
         if (enemySpawnPoints == null || enemySpawnPoints.Length == 0)
@@ -96,20 +115,5 @@ public class EnemySpawner : MonoBehaviour
 
         int wrapped = index % enemySpawnPoints.Length;
         return enemySpawnPoints[wrapped] != null ? enemySpawnPoints[wrapped] : transform;
-    }
-
-    /// <summary>
-    /// Nudges a spawn position by a random amount on the XZ plane. Height is untouched so
-    /// enemies still land on the floor rather than inside or above it.
-    /// </summary>
-    private Vector3 ScatterAround(Vector3 origin)
-    {
-        if (spawnScatterRadius <= 0f)
-        {
-            return origin;
-        }
-
-        Vector2 offset = Random.insideUnitCircle * spawnScatterRadius;
-        return origin + new Vector3(offset.x, 0f, offset.y);
     }
 }
