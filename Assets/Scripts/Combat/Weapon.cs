@@ -53,6 +53,24 @@ public class Weapon : NetworkBehaviour
 
         // Why not Instantiate? Because we are in a networked environment,
         // and we want to spawn the projectile across the network for all clients to see. Fusion handles this for us.
-        Runner.Spawn(projectilePrefab, firePositionPoint.position, firePositionPoint.rotation, Object.InputAuthority);
+        //
+        // The last argument is onBeforeSpawned: it runs after the object exists but before
+        // Spawned() is called on it. Stamping the owner here rather than after Spawn returns
+        // means the value is already correct the first time the projectile simulates, and it
+        // replicates cleanly to clients. Without this, `player` stayed PlayerRef.None and the
+        // self-hit check in Projectile could never match.
+        Runner.Spawn(
+            projectilePrefab,
+            firePositionPoint.position,
+            firePositionPoint.rotation,
+            Object.InputAuthority,
+            (runner, spawnedObject) =>
+            {
+                if (spawnedObject.TryGetComponent(out Projectile projectile))
+                {
+                    projectile.player = Object.InputAuthority;
+                    projectile.firedByEnemy = false;
+                }
+            });
     }
 }

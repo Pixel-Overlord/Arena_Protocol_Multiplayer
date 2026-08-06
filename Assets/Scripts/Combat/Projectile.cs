@@ -13,6 +13,9 @@ public class Projectile : NetworkBehaviour
     [Tooltip("Player who fired it, replicated. Used to skip self-hits.")]
     [Networked] public PlayerRef player { get; set; }
 
+    [Tooltip("True when an enemy fired this instead of a player. Set by EnemyWeapon. Lets one projectile script serve both sides while still knowing who not to hurt.")]
+    [Networked] public NetworkBool firedByEnemy { get; set; }
+
     [Tooltip("Counts down lifetimeSeconds; when expired, the projectile despawns even if it never hits anything so stray shots don't leak objects forever.")]
     [Networked] private TickTimer life { get; set; }
 
@@ -57,27 +60,65 @@ public class Projectile : NetworkBehaviour
     }
 
     /// <summary>
-    /// On trigger enter, check if the other object has a PlayerHealth component.
-    /// If it does, apply damage and despawn the projectile. Ignore self-hits.
+    /// Resolves what was hit to an IDamageable, filters out friendly fire, applies damage
+    /// and despawns.
+    ///
+    /// Targets IDamageable rather than PlayerHealth so the same script serves both player
+    /// bullets (which need to hurt enemies) and enemy bullets (which need to hurt players).
+    ///
+    /// Note this only runs on the state authority, so the host is the single source of
+    /// truth for every hit - clients never decide that they were shot.
     /// </summary>
-    /// <param name="other">Mesh collider of the object that's been hit.</param>
-    private void OnTriggerEnter(Collider enemyCollider)
+    /// <param name="hitCollider">Collider of the object that's been hit.</param>
+    private void OnTriggerEnter(Collider hitCollider)
     {
-        Debug.Log("Collision");
         if (!Object.HasStateAuthority)
         {
             return;
         }
-        if (!enemyCollider.TryGetComponent(out PlayerHealth health))
-        { 
-            health = enemyCollider.GetComponentInParent<PlayerHealth>();
-        }
-        if (health == null || health.Object.InputAuthority == player)
-        { 
-            return; 
+
+        // The visual colliders sit on child objects (Sphere/Capsule), while the health
+        // component lives on the prefab root, so a parent search is needed as a fallback.
+        // GetComponent is used instead of TryGetComponent because interfaces are involved.
+        IDamageable target = hitCollider.GetComponent<IDamageable>();
+
+        if (target == null)
+        {
+            target = hitCollider.GetComponentInParent<IDamageable>();
         }
 
-        health.applyDamage(damage);
+        // Hit the arena floor or a wall. Despawn so stray shots don't sail on forever.
+        if (target == null)
+        {
+            Runner.Despawn(Object);
+            return;
+        }
+
+        // Pass straight through corpses rather than wasting the shot on them.
+        if (target.IsDead)
+        {
+            return;
+        }
+
+        if (target is PlayerHealth playerTarget)
+        {
+            // A player must not shoot themselves. This check is only meaningful for
+            // player-fired shots: enemy bullets carry PlayerRef.None, which would never
+            // match a real player's InputAuthority anyway.
+            if (!firedByEnemy && playerTarget.Object.InputAuthority == player)
+            {
+                return;
+            }
+        }
+        else if (firedByEnemy)
+        {
+            // An enemy bullet hit another enemy. The layer collision matrix should already
+            // prevent this, but a mis-set layer in the inspector shouldn't turn into
+            // enemies killing each other.
+            return;
+        }
+
+        target.applyDamage(damage);
 
         Runner.Despawn(Object);
     }
