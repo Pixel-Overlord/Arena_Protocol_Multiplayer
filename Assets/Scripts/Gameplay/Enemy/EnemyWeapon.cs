@@ -38,6 +38,13 @@ public class EnemyWeapon : NetworkBehaviour
             return false;
         }
 
+        // Defensive: Enemy already stops calling this once the match ends, but a shot
+        // spawned after GAME OVER would be the one thing still moving.
+        if (GameStateManager.IsMatchOver)
+        {
+            return false;
+        }
+
         if (!cooldownTimer.ExpiredOrNotRunning(Runner))
         {
             return false;

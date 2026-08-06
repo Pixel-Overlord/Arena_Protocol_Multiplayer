@@ -14,17 +14,26 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [Networked] public float currentHealth { get; set; }
 
     [Tooltip("Boolean for dead or alive state of player. If Boolean is true, player is dead.")]
-    [Networked] public NetworkBool isDead { get; set; }
+    [Networked, OnChangedRender(nameof(OnDeathStateChanged))] public NetworkBool isDead { get; set; }
 
     [SerializeField] private float maxHealth = 100f;
 
-    // IDamageable wants a plain bool; isDead is a NetworkBool, which is a struct with an
-    // implicit conversion, so this bridges the two without changing how isDead is stored.
+    // Collected in Awake rather than wired in the inspector, so the Player prefab needs no
+    // extra setup and can't be half-configured. Cached because OnChangedRender can fire
+    // often and GetComponentsInChildren allocates.
+    private Renderer[] bodyRenderers;
+    private Collider[] bodyColliders;
+
     public bool IsDead => isDead;
 
-    // maxHealth is serialized and private. Exposing it read-only lets health bars and
-    // any future wave-scaling read the ceiling without being able to move it.
     public float MaxHealth => maxHealth;
+
+    private void Awake()
+    {
+        // true = include inactive, so a body part that starts disabled is still tracked.
+        bodyRenderers = GetComponentsInChildren<Renderer>(true);
+        bodyColliders = GetComponentsInChildren<Collider>(true);
+    }
 
     /// <summary>
     /// This function sets the Health to its maxHealth when spawned.
@@ -34,6 +43,45 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         if (Object.HasStateAuthority)
         {
             currentHealth = maxHealth;
+        }
+
+        // Applied on spawn as well as on change, so a peer that joins mid-match sees an
+        // already-dead player correctly hidden. OnChangedRender only fires on transitions.
+        ApplyDeathVisuals();
+    }
+
+    /// <summary>
+    /// Fires on every peer when isDead flips, because the property is replicated. This is
+    /// why hiding the body needs no RPC - the networked flag is the single source of truth
+    /// and each peer reacts to it locally.
+    /// </summary>
+    private void OnDeathStateChanged()
+    {
+        ApplyDeathVisuals();
+    }
+
+    /// <summary>
+    /// Hides or shows the whole body. Colliders go with the renderers so a corpse cannot
+    /// soak enemy projectiles or block movement.
+    /// </summary>
+    private void ApplyDeathVisuals()
+    {
+        bool isAlive = !isDead;
+
+        for (int i = 0; i < bodyRenderers.Length; i++)
+        {
+            if (bodyRenderers[i] != null)
+            {
+                bodyRenderers[i].enabled = isAlive;
+            }
+        }
+
+        for (int i = 0; i < bodyColliders.Length; i++)
+        {
+            if (bodyColliders[i] != null)
+            {
+                bodyColliders[i].enabled = isAlive;
+            }
         }
     }
 

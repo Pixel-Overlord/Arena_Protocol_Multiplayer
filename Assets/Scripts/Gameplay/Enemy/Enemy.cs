@@ -63,6 +63,9 @@ public class Enemy : NetworkBehaviour, IDamageable
     [Header("Health")]
     [SerializeField] private float maxHealth = 30f;
 
+    [Tooltip("Added to the shared team score when this enemy dies. Score is a team total, so it doesn't matter which player landed the shot.")]
+    [SerializeField] private int scoreValue = 10;
+
     private EnemyWeapon weapon;
 
     // Plain fields, not [Networked]: only the host ever reads them, so replicating them
@@ -100,6 +103,13 @@ public class Enemy : NetworkBehaviour, IDamageable
         // Clients render what the host decided; they must not run the AI themselves or the
         // two peers would drift apart.
         if (!Object.HasStateAuthority || State == EnemyState.Dead)
+        {
+            return;
+        }
+
+        // Match over - the arena freezes. Returning before the state machine leaves each
+        // enemy standing exactly where it was, rather than snapping to Idle.
+        if (GameStateManager.IsMatchOver)
         {
             return;
         }
@@ -382,6 +392,13 @@ public class Enemy : NetworkBehaviour, IDamageable
         // Set the state before despawning so anything reading it this tick sees a corpse
         // rather than a full-health enemy.
         State = EnemyState.Dead;
+
+        // Score is a shared team total, so no kill attribution is needed - whoever fired
+        // the shot, the points go to the same place.
+        if (GameStateManager.Instance != null)
+        {
+            GameStateManager.Instance.AddScore(scoreValue);
+        }
 
         Runner.Despawn(Object);
     }

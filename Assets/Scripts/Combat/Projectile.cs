@@ -50,6 +50,13 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
+        // Freeze in flight once the match is over. Returning before the lifetime check too,
+        // so bullets don't quietly despawn out from under a frozen scene.
+        if (GameStateManager.IsMatchOver)
+        {
+            return;
+        }
+
         if (life.ExpiredOrNotRunning(Runner))
         {
             Runner.Despawn(Object);
