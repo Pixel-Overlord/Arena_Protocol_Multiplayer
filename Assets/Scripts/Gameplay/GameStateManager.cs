@@ -48,6 +48,9 @@ public class GameStateManager : NetworkBehaviour
     [Tooltip("Replicated so clients can show a 'waiting for opponent' message later.")]
     [Networked] public MatchState State { get; set; }
 
+    [Tooltip("Shared team score - both players feed the same number, and it only comes from collecting energy orbs. Replicated so each peer's HUD shows the same total.")]
+    [Networked] public int TeamScore { get; set; }
+
     [Tooltip("Which wave is running. 0 before the first one spawns.")]
     [Networked] public int WaveNumber { get; set; }
 
@@ -82,6 +85,7 @@ public class GameStateManager : NetworkBehaviour
         if (Object.HasStateAuthority)
         {
             State = MatchState.WaitingForPlayers;
+            TeamScore = 0;
             WaveNumber = 0;
             LiveEnemyCount = 0;
             waveBreakPending = false;
@@ -235,6 +239,22 @@ public class GameStateManager : NetworkBehaviour
 
         waveBreakPending = true;
         waveBreakTimer = TickTimer.CreateFromSeconds(Runner, secondsBetweenWaves);
+    }
+
+    /// <summary>
+    /// Adds to the shared team score. Called by EnergyOrb when either player collects one -
+    /// orbs are the only thing that scores, so killing enemies deliberately awards nothing.
+    /// </summary>
+    public void AddScore(int points)
+    {
+        // Only the host may write networked state. Clients receive the new total through
+        // replication, so there is nothing for them to do here.
+        if (!Object.HasStateAuthority || points <= 0)
+        {
+            return;
+        }
+
+        TeamScore += points;
     }
 
     /// <summary>

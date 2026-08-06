@@ -11,11 +11,7 @@ public interface IDamageable
     /// themselves, exactly as PlayerHealth.applyDamage already does.
     /// </summary>
     /// <param name="damageAmount">How much health to take off.</param>
-    /// <param name="attacker">
-    /// Who fired the shot, or PlayerRef.None for an enemy's. Carried so Enemy can pay the
-    /// kill to the right player's score - scores are per player, not a shared total.
-    /// </param>
-    void applyDamage(float damageAmount, PlayerRef attacker);
+    void applyDamage(float damageAmount);
 
     /// <summary>
     /// True once this target is out of health. Used to skip corpses.

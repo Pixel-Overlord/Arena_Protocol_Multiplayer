@@ -156,19 +156,15 @@ public class PlayerSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// Puts back everything a rejoining player left with: health, score, and the ability
-    /// they had along with its remaining duration and cooldown.
+    /// Puts back everything a rejoining player left with: their health, and the ability they
+    /// had along with its remaining duration and cooldown. The team score is not per player,
+    /// so it lives on GameStateManager and survives a disconnect without being snapshotted.
     /// </summary>
     private void RestoreReturningPlayer(NetworkObject playerObject, SavedPlayerState savedState)
     {
         if (playerObject.TryGetComponent(out PlayerHealth health))
         {
             health.RestoreState(savedState);
-        }
-
-        if (playerObject.TryGetComponent(out PlayerScore score))
-        {
-            score.RestoreState(savedState);
         }
 
         if (playerObject.TryGetComponent(out PlayerAbility ability))
@@ -216,11 +212,6 @@ public class PlayerSpawner : MonoBehaviour
         if (playerObject.TryGetComponent(out PlayerHealth health))
         {
             health.CaptureStateInto(ref state);
-        }
-
-        if (playerObject.TryGetComponent(out PlayerScore score))
-        {
-            score.CaptureStateInto(ref state);
         }
 
         if (playerObject.TryGetComponent(out PlayerAbility ability))
