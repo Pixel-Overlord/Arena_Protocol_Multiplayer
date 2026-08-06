@@ -31,6 +31,9 @@ public class PlayerHUD : MonoBehaviour
     [Tooltip("Reads 'Shield' or 'Heal' depending on which ability this player was assigned.")]
     [SerializeField] private TMP_Text localPowerLabel;
 
+    [Tooltip("Same Filled setup as the power bar. Shows whether the dash is ready, and fills back up while it recovers. A plain 'Dash' caption next to it needs no wiring.")]
+    [SerializeField] private Image localDashFill;
+
     [Header("Opponent (top-right)")]
     [Tooltip("Parent object for the opponent's bar. Hidden while playing solo.")]
     [SerializeField] private GameObject opponentRoot;
@@ -61,12 +64,16 @@ public class PlayerHUD : MonoBehaviour
     [SerializeField] private Color shieldColor = new Color(0.2f, 0.6f, 1f);
     [SerializeField] private Color healColor = new Color(0.2f, 1f, 0.4f);
 
+    [Tooltip("Dash bar colour while the dash is available.")]
+    [SerializeField] private Color dashColor = new Color(1f, 0.7f, 0.2f);
+
     [Tooltip("Power bar colour while the ability is spent and recovering.")]
     [SerializeField] private Color cooldownColor = new Color(0.45f, 0.45f, 0.45f);
 
     private NetworkRunner runner;
     private PlayerHealth localHealth;
     private PlayerAbility localAbility;
+    private PlayerMovement localMovement;
     private PlayerHealth opponentHealth;
 
     // Unscaled so the readout keeps ticking regardless of what Time.timeScale is doing.
@@ -192,6 +199,7 @@ public class PlayerHUD : MonoBehaviour
         // these must end up null so the panel hides instead of drawing a despawned player.
         localHealth = null;
         localAbility = null;
+        localMovement = null;
 
         // PlayerSpawner calls SetPlayerObject after every successful spawn, which is what
         // makes this lookup work. Until then it returns null and the panel stays hidden.
@@ -204,6 +212,7 @@ public class PlayerHUD : MonoBehaviour
 
         localObject.TryGetComponent(out localHealth);
         localObject.TryGetComponent(out localAbility);
+        localObject.TryGetComponent(out localMovement);
     }
 
     private void ResolveOpponent()
@@ -257,6 +266,33 @@ public class PlayerHUD : MonoBehaviour
         SetBar(localHealthFill, localHealthText, localHealth);
 
         UpdatePowerBar();
+        UpdateDashBar();
+    }
+
+    /// <summary>
+    /// Draws the dash cooldown.
+    ///
+    /// Unlike the ability bar there is no meter worth showing - a dash lasts a fifth of a
+    /// second - so this reads purely as readiness: full when the dash is available, refilling
+    /// while it recovers.
+    /// </summary>
+    private void UpdateDashBar()
+    {
+        if (localDashFill == null || !localMovement.IsLive())
+        {
+            return;
+        }
+
+        if (localMovement.IsDashOnCooldown)
+        {
+            // 1 - remaining so the bar fills up towards ready, matching the power bar.
+            localDashFill.fillAmount = 1f - localMovement.DashCooldownNormalized;
+            localDashFill.color = cooldownColor;
+            return;
+        }
+
+        localDashFill.fillAmount = 1f;
+        localDashFill.color = dashColor;
     }
 
     private void UpdatePowerBar()

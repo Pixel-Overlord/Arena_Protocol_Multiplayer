@@ -2,13 +2,7 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// 1. Makes the arena camera follow this player, but only on the peer that owns it.
-///
-/// 2. Adds a fallback so a dead player's camera follows a living player
-/// instead of its own (now-hidden) capsule.
-/// 
-/// 3. A dead player keeps watching the match
-/// through a teammate rather than staring at nothing.
+/// Makes the arena camera follow this player, but only on the peer that owns it.
 /// </summary>
 public class PlayerCamera : NetworkBehaviour
 {
@@ -21,16 +15,6 @@ public class PlayerCamera : NetworkBehaviour
 
     private Transform cameraTransform;
     private Vector3 followVelocity;
-
-    private PlayerHealth playerHealth;
-
-    [Tooltip("the living player's player health currently being followed while this player is dead.")]
-    private PlayerHealth spectateTarget;
-
-    private void Awake()
-    {
-        playerHealth = GetComponent<PlayerHealth>();
-    }
 
     public override void Spawned()
     {
@@ -67,27 +51,7 @@ public class PlayerCamera : NetworkBehaviour
             return;
         }
 
-        Transform followTarget = transform;
-
-        if (playerHealth.isDead)
-        {
-            // IsLive rather than a null check: the player being spectated may have
-            // disconnected, and a despawned player object is parked by the pool rather than
-            // destroyed - so the reference stays non-null and reading isDead off it throws.
-            if (!spectateTarget.IsLive() || spectateTarget.isDead)
-            {
-                spectateTarget = findLivingPlayer();
-            }
-
-            if (spectateTarget == null)
-            {
-                return; // everyone's dead or gone, hold last position.
-            }
-
-            followTarget = spectateTarget.transform;
-        }
-
-        Vector3 desiredPosition = followTarget.position + offset;
+        Vector3 desiredPosition = transform.position + offset;
 
         cameraTransform.position = Vector3.SmoothDamp(
             cameraTransform.position,
@@ -95,21 +59,6 @@ public class PlayerCamera : NetworkBehaviour
             ref followVelocity,
             smoothTime);
 
-        cameraTransform.LookAt(followTarget.position);
-    }
-
-
-    private PlayerHealth findLivingPlayer()
-    {
-        foreach (var player in FindObjectsOfType<PlayerHealth>())
-        {
-            // IsLive is checked before isDead, and in that order: a parked pool instance
-            // would throw the moment isDead is read.
-            if (player != playerHealth && player.IsLive() && !player.isDead)
-            {
-                return player;
-            }
-        }
-        return null;
+        cameraTransform.LookAt(transform.position);
     }
 }
