@@ -40,6 +40,9 @@ public class PlayerHUD : MonoBehaviour
     [Header("Score (top-centre)")]
     [SerializeField] private TMP_Text scoreText;
 
+    [Tooltip("Shows the current wave and how many enemies are left in it.")]
+    [SerializeField] private TMP_Text waveText;
+
     [Header("Game over")]
     [Tooltip("Shown in the centre of the screen once every player is dead. Starts inactive.")]
     [SerializeField] private GameObject gameOverRoot;
@@ -220,15 +223,28 @@ public class PlayerHUD : MonoBehaviour
 
     private void UpdateScore()
     {
-        if (scoreText == null)
+        // Instance is null until the arena's GameStateManager has spawned.
+        GameStateManager gameState = GameStateManager.Instance;
+
+        if (scoreText != null)
+        {
+            scoreText.text = $"Score : {(gameState != null ? gameState.TeamScore : 0)}";
+        }
+
+        if (waveText == null)
         {
             return;
         }
 
-        // Instance is null until the arena's GameStateManager has spawned.
-        int score = GameStateManager.Instance != null ? GameStateManager.Instance.TeamScore : 0;
+        // WaveNumber is 0 until the match actually starts, so show the waiting state rather
+        // than a nonsensical "Wave : 0".
+        if (gameState == null || gameState.WaveNumber <= 0)
+        {
+            waveText.text = "Waiting for players...";
+            return;
+        }
 
-        scoreText.text = $"Score : {score}";
+        waveText.text = $"Wave : {gameState.WaveNumber}    Enemies : {gameState.LiveEnemyCount}";
     }
 
     /// <summary>

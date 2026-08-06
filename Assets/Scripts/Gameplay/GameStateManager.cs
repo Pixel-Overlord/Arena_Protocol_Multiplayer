@@ -51,8 +51,23 @@ public class GameStateManager : NetworkBehaviour
     [Tooltip("Shared team score - both players contribute to the same number. Replicated so each peer's HUD shows the same total. Later phases will also add to this from powerups.")]
     [Networked] public int TeamScore { get; set; }
 
+    [Tooltip("Which wave is running. 0 before the first one spawns.")]
+    [Networked] public int WaveNumber { get; set; }
+
+    [Tooltip("Enemies still alive in the current wave. Replicated so the HUD can show it without asking the host.")]
+    [Networked] public int LiveEnemyCount { get; set; }
+
+    [Tooltip("Counts down the breather between one wave being cleared and the next spawning.")]
+    [Networked] private TickTimer waveBreakTimer { get; set; }
+
+    [Tooltip("True while waiting out the gap between waves. Needed because a TickTimer that was never started also reports 'expired', which would otherwise spawn the next wave instantly.")]
+    [Networked] private NetworkBool waveBreakPending { get; set; }
+
     [Tooltip("How many players must be in the session before the first wave spawns. Set to 1 while testing solo in the editor.")]
     [SerializeField] private int requiredPlayers = 2;
+
+    [Tooltip("Breather between clearing a wave and the next one arriving.")]
+    [SerializeField] private float secondsBetweenWaves = 3f;
 
     [SerializeField] private EnemySpawner enemySpawner;
 
@@ -67,6 +82,9 @@ public class GameStateManager : NetworkBehaviour
         {
             State = MatchState.WaitingForPlayers;
             TeamScore = 0;
+            WaveNumber = 0;
+            LiveEnemyCount = 0;
+            waveBreakPending = false;
         }
     }
 
@@ -119,12 +137,91 @@ public class GameStateManager : NetworkBehaviour
             return;
         }
 
-        if (aliveCount > 0)
+        if (aliveCount == 0)
+        {
+            State = MatchState.Ended;
+            return;
+        }
+
+        TickWaveLoop();
+    }
+
+    /// <summary>
+    /// Spawns the next wave once the arena has been cleared and the breather has elapsed.
+    ///
+    /// Only reached while State is InProgress, which is what stops a fresh wave arriving
+    /// after GAME OVER.
+    /// </summary>
+    private void TickWaveLoop()
+    {
+        // A wave is still being fought.
+        if (LiveEnemyCount > 0)
         {
             return;
         }
 
-        State = MatchState.Ended;
+        // Nothing is waiting to spawn. This is the guard that matters: without it, a
+        // TickTimer that was never started reads as expired and wave 2 would appear the
+        // instant wave 1 spawned.
+        if (!waveBreakPending)
+        {
+            return;
+        }
+
+        if (!waveBreakTimer.Expired(Runner))
+        {
+            return;
+        }
+
+        StartNextWave();
+    }
+
+    /// <summary>
+    /// Advances the wave counter and asks the spawner to fill the arena.
+    /// </summary>
+    private void StartNextWave()
+    {
+        if (enemySpawner == null)
+        {
+            Debug.LogError("GameStateManager: no EnemySpawner assigned, no enemies will spawn.", this);
+            return;
+        }
+
+        waveBreakPending = false;
+        WaveNumber++;
+
+        // Trusting the spawner's return value rather than the requested size: if a spawn
+        // failed, counting it would leave LiveEnemyCount permanently above zero and the
+        // wave loop would stall waiting for a kill that can never happen.
+        LiveEnemyCount = enemySpawner.SpawnWave(Runner, WaveNumber);
+
+        if (LiveEnemyCount <= 0)
+        {
+            Debug.LogError($"GameStateManager: wave {WaveNumber} spawned no enemies, wave loop has stalled.", this);
+        }
+    }
+
+    /// <summary>
+    /// Called by Enemy when it dies. Starts the breather once the wave is wiped out.
+    /// </summary>
+    public void NotifyEnemyKilled()
+    {
+        if (!Object.HasStateAuthority || State != MatchState.InProgress)
+        {
+            return;
+        }
+
+        // Never below zero - a double-report would otherwise push the count negative and
+        // the "wave cleared" test would still pass, spawning waves early.
+        LiveEnemyCount = Mathf.Max(0, LiveEnemyCount - 1);
+
+        if (LiveEnemyCount > 0)
+        {
+            return;
+        }
+
+        waveBreakPending = true;
+        waveBreakTimer = TickTimer.CreateFromSeconds(Runner, secondsBetweenWaves);
     }
 
     /// <summary>
@@ -177,12 +274,6 @@ public class GameStateManager : NetworkBehaviour
 
         State = MatchState.InProgress;
 
-        if (enemySpawner == null)
-        {
-            Debug.LogError("GameStateManager: no EnemySpawner assigned, match started with no enemies.", this);
-            return;
-        }
-
-        enemySpawner.SpawnInitialWave(runner);
+        StartNextWave();
     }
 }
