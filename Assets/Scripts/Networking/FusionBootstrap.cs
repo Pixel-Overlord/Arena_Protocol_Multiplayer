@@ -5,10 +5,16 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using static UnityEngine.EventSystems.PointerEventData;
 
 /// <summary>
-/// This class does the following things:
-///     1. 
+/// 
+/// What it does: Reads the local peer's keyboard/mouse and packs it into NetworkInputData
+/// for that tick. 
+/// 
+/// Why it's needed: This is the only place raw Unity Input is allowed to be read for 
+/// gameplay purposes — everything else reads the replicated NetworkInputData instead, which is what keeps input consistent under resimulation.
+/// 
 /// </summary>
 public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
 {
@@ -94,6 +100,12 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
         NetworkInputData data = new NetworkInputData();
 
         Vector3 direction = Vector3.zero;
+
+        NetworkButtons buttons = default;
+        buttons.Set((int)InputButton.Fire, Input.GetMouseButton(0));
+        buttons.Set((int)InputButton.Dash, Input.GetKey(KeyCode.LeftShift));
+        buttons.Set((int)InputButton.Ability, Input.GetKey(KeyCode.Q));
+        data.Buttons = buttons;
 
         if (Input.GetKey(KeyCode.W))
         {
