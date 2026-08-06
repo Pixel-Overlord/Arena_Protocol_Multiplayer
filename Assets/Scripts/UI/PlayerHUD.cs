@@ -1,11 +1,12 @@
 using Fusion;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 /// <summary>
-/// Screen-space HUD for the arena: the local player's health and power bottom-left, the
-/// opponent's health top-right, and the shared team score top-centre.
+/// Screen-space HUD for the arena: the local player's health, power and score bottom-left,
+/// the opponent's health and score top-right. Each score is that player's own.
 ///
 /// A plain MonoBehaviour on the PlayerUI object, not a NetworkBehaviour. The HUD only ever
 /// reads replicated state and never writes it, so it needs no authority and no NetworkObject.
@@ -30,6 +31,13 @@ public class PlayerHUD : MonoBehaviour
     [Tooltip("Reads 'Shield' or 'Heal' depending on which ability this player was assigned.")]
     [SerializeField] private TMP_Text localPowerLabel;
 
+    // FormerlySerializedAs keeps the label that used to show the shared team total wired up:
+    // without it the rename would silently drop the existing inspector reference and the
+    // score would just stop appearing.
+    [Tooltip("The local player's own score, next to their health bar.")]
+    [FormerlySerializedAs("scoreText")]
+    [SerializeField] private TMP_Text localScoreText;
+
     [Header("Opponent (top-right)")]
     [Tooltip("Parent object for the opponent's bar. Hidden while playing solo.")]
     [SerializeField] private GameObject opponentRoot;
@@ -37,11 +45,8 @@ public class PlayerHUD : MonoBehaviour
     [SerializeField] private Image opponentHealthFill;
     [SerializeField] private TMP_Text opponentHealthText;
 
-    [Header("Score (top-centre)")]
-    [SerializeField] private TMP_Text scoreText;
-
-    [Tooltip("Shows the current wave and how many enemies are left in it.")]
-    [SerializeField] private TMP_Text waveText;
+    [Tooltip("The opponent's score. Lives inside opponentRoot so it hides with them.")]
+    [SerializeField] private TMP_Text opponentScoreText;
 
     [Header("Game over")]
     [Tooltip("Shown in the centre of the screen once every player is dead. Starts inactive.")]
@@ -57,7 +62,9 @@ public class PlayerHUD : MonoBehaviour
     private NetworkRunner runner;
     private PlayerHealth localHealth;
     private PlayerAbility localAbility;
+    private PlayerScore localScore;
     private PlayerHealth opponentHealth;
+    private PlayerScore opponentScore;
 
     private void Update()
     {
@@ -108,30 +115,42 @@ public class PlayerHUD : MonoBehaviour
 
     private void ResolveLocalPlayer()
     {
-        if (localHealth != null)
+        // IsLive rather than a null check throughout this class: a departed player's object
+        // is parked by the pool, not destroyed, so the cached reference never goes null.
+        if (localHealth.IsLive())
         {
             return;
         }
+
+        // Cleared rather than left to be overwritten: if the lookup below finds nothing,
+        // these must end up null so the panel hides instead of drawing a despawned player.
+        localHealth = null;
+        localAbility = null;
+        localScore = null;
 
         // PlayerSpawner calls SetPlayerObject after every successful spawn, which is what
         // makes this lookup work. Until then it returns null and the panel stays hidden.
         NetworkObject localObject = runner.GetPlayerObject(runner.LocalPlayer);
 
-        if (localObject == null)
+        if (!localObject.IsLive())
         {
             return;
         }
 
         localObject.TryGetComponent(out localHealth);
         localObject.TryGetComponent(out localAbility);
+        localObject.TryGetComponent(out localScore);
     }
 
     private void ResolveOpponent()
     {
-        if (opponentHealth != null)
+        if (opponentHealth.IsLive())
         {
             return;
         }
+
+        opponentHealth = null;
+        opponentScore = null;
 
         foreach (PlayerRef player in runner.ActivePlayers)
         {
@@ -142,8 +161,16 @@ public class PlayerHUD : MonoBehaviour
 
             NetworkObject opponentObject = runner.GetPlayerObject(player);
 
-            if (opponentObject != null && opponentObject.TryGetComponent(out opponentHealth))
+            if (!opponentObject.IsLive())
             {
+                continue;
+            }
+
+            if (opponentObject.TryGetComponent(out opponentHealth))
+            {
+                // Picked up together with the health so the two can never drift apart - the
+                // liveness check above re-resolves both at once when the opponent leaves.
+                opponentObject.TryGetComponent(out opponentScore);
                 return;
             }
         }
@@ -155,7 +182,7 @@ public class PlayerHUD : MonoBehaviour
 
     private void UpdateLocalPanel()
     {
-        bool hasLocalPlayer = localHealth != null;
+        bool hasLocalPlayer = localHealth.IsLive();
 
         if (localRoot != null)
         {
@@ -174,7 +201,7 @@ public class PlayerHUD : MonoBehaviour
 
     private void UpdatePowerBar()
     {
-        if (localAbility == null)
+        if (!localAbility.IsLive())
         {
             return;
         }
@@ -206,7 +233,7 @@ public class PlayerHUD : MonoBehaviour
 
     private void UpdateOpponentPanel()
     {
-        bool hasOpponent = opponentHealth != null;
+        bool hasOpponent = opponentHealth.IsLive();
 
         if (opponentRoot != null)
         {
@@ -221,30 +248,21 @@ public class PlayerHUD : MonoBehaviour
         SetBar(opponentHealthFill, opponentHealthText, opponentHealth);
     }
 
+    /// <summary>
+    /// Draws both players' scores. Each score is replicated on its own player object, so no
+    /// peer has to ask the host for the other's number.
+    /// </summary>
     private void UpdateScore()
     {
-        // Instance is null until the arena's GameStateManager has spawned.
-        GameStateManager gameState = GameStateManager.Instance;
-
-        if (scoreText != null)
+        if (localScoreText != null)
         {
-            scoreText.text = $"Score : {(gameState != null ? gameState.TeamScore : 0)}";
+            localScoreText.text = $"Score : {(localScore.IsLive() ? localScore.Score : 0)}";
         }
 
-        if (waveText == null)
+        if (opponentScoreText != null)
         {
-            return;
+            opponentScoreText.text = $"Score : {(opponentScore.IsLive() ? opponentScore.Score : 0)}";
         }
-
-        // WaveNumber is 0 until the match actually starts, so show the waiting state rather
-        // than a nonsensical "Wave : 0".
-        if (gameState == null || gameState.WaveNumber <= 0)
-        {
-            waveText.text = "Waiting for players...";
-            return;
-        }
-
-        waveText.text = $"Wave : {gameState.WaveNumber}    Enemies : {gameState.LiveEnemyCount}";
     }
 
     /// <summary>

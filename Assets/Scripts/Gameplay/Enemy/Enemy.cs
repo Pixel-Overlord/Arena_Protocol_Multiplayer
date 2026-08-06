@@ -63,7 +63,7 @@ public class Enemy : NetworkBehaviour, IDamageable
     [Header("Health")]
     [SerializeField] private float maxHealth = 30f;
 
-    [Tooltip("Added to the shared team score when this enemy dies. Score is a team total, so it doesn't matter which player landed the shot.")]
+    [Tooltip("Points paid to whichever player lands the killing shot. Scores are per player, so the kill has to be attributed.")]
     [SerializeField] private int scoreValue = 10;
 
     private EnemyWeapon weapon;
@@ -298,7 +298,10 @@ public class Enemy : NetworkBehaviour, IDamageable
         {
             NetworkObject playerObject = Runner.GetPlayerObject(player);
 
-            if (playerObject == null)
+            // IsLive rather than a null check: a despawned player object is parked by the
+            // pool rather than destroyed, so it can still be handed back here and reading
+            // isDead off it would throw inside FixedUpdateNetwork.
+            if (!playerObject.IsLive())
             {
                 continue;
             }
@@ -375,7 +378,7 @@ public class Enemy : NetworkBehaviour, IDamageable
     /// On death the enemy is despawned, which routes through PooledNetworkObjectProvider
     /// and parks the instance for reuse rather than destroying it.
     /// </summary>
-    public void applyDamage(float damageAmount)
+    public void applyDamage(float damageAmount, PlayerRef attacker)
     {
         if (!Object.HasStateAuthority || State == EnemyState.Dead)
         {
@@ -393,18 +396,40 @@ public class Enemy : NetworkBehaviour, IDamageable
         // rather than a full-health enemy.
         State = EnemyState.Dead;
 
-        // Score is a shared team total, so no kill attribution is needed - whoever fired
-        // the shot, the points go to the same place.
-        //
-        // Kept as two calls rather than one: score also comes from powerups later, which
-        // award points without a kill, so the wave counter must not be tied to scoring.
+        // Scoring and the wave counter are kept as two separate calls: the wave loop cares
+        // that an enemy died at all, while the points belong to one specific player.
+        AwardKillTo(attacker);
+
         if (GameStateManager.Instance != null)
         {
-            GameStateManager.Instance.AddScore(scoreValue);
             GameStateManager.Instance.NotifyEnemyKilled();
         }
 
         Runner.Despawn(Object);
+    }
+
+    /// <summary>
+    /// Pays this enemy's points to whoever landed the killing shot.
+    ///
+    /// A shot from someone who has since disconnected simply scores nothing: their player
+    /// object is already gone, so there is nothing to credit and the points are dropped.
+    /// </summary>
+    private void AwardKillTo(PlayerRef attacker)
+    {
+        if (attacker == PlayerRef.None)
+        {
+            return;
+        }
+
+        NetworkObject attackerObject = Runner.GetPlayerObject(attacker);
+
+        // IsLive rather than a null check: the shot outlives the shooter, so a player who
+        // disconnected while their bullet was still in flight leaves a parked object here.
+        // Writing Score to it would throw just as surely as reading one.
+        if (attackerObject.IsLive() && attackerObject.TryGetComponent(out PlayerScore score))
+        {
+            score.AddScore(scoreValue);
+        }
     }
 
     /// <summary>

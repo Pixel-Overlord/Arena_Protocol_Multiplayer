@@ -206,8 +206,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _State: 0
-  _TeamScore: 0
-  requiredPlayers: 1
+  _WaveNumber: 0
+  _LiveEnemyCount: 0
+  requiredPlayers: 2
+  secondsBetweenWaves: 3
   enemySpawner: {fileID: 1108892708}
 --- !u!114 &141593172
 MonoBehaviour:
@@ -820,8 +822,9 @@ MonoBehaviour:
   - {fileID: 360350084}
   - {fileID: 1250640422}
   - {fileID: 1399443698}
-  initialEnemyCount: 8
-  spawnScatterRadius: 5
+  baseEnemyCount: 5
+  extraEnemiesPerWave: 2
+  maxEnemiesPerWave: 15
 --- !u!4 &1108892709
 Transform:
   m_ObjectHideFlags: 0

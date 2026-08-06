@@ -48,9 +48,6 @@ public class GameStateManager : NetworkBehaviour
     [Tooltip("Replicated so clients can show a 'waiting for opponent' message later.")]
     [Networked] public MatchState State { get; set; }
 
-    [Tooltip("Shared team score - both players contribute to the same number. Replicated so each peer's HUD shows the same total. Later phases will also add to this from powerups.")]
-    [Networked] public int TeamScore { get; set; }
-
     [Tooltip("Which wave is running. 0 before the first one spawns.")]
     [Networked] public int WaveNumber { get; set; }
 
@@ -71,6 +68,10 @@ public class GameStateManager : NetworkBehaviour
 
     [SerializeField] private EnemySpawner enemySpawner;
 
+    // Host-only rather than [Networked]: only the state authority runs the end-of-match
+    // check, and this project does not do host migration, so no peer needs to read it.
+    private bool anyPlayerHasSpawned;
+
     public override void Spawned()
     {
         Instance = this;
@@ -81,10 +82,10 @@ public class GameStateManager : NetworkBehaviour
         if (Object.HasStateAuthority)
         {
             State = MatchState.WaitingForPlayers;
-            TeamScore = 0;
             WaveNumber = 0;
             LiveEnemyCount = 0;
             waveBreakPending = false;
+            anyPlayerHasSpawned = false;
         }
     }
 
@@ -117,7 +118,10 @@ public class GameStateManager : NetworkBehaviour
         {
             NetworkObject playerObject = Runner.GetPlayerObject(player);
 
-            if (playerObject == null || !playerObject.TryGetComponent(out PlayerHealth health))
+            // IsLive rather than a null check: a despawned player object is parked by the
+            // pool rather than destroyed, so it can still be handed back here, and reading
+            // isDead off it would throw and take the whole simulation with it.
+            if (!playerObject.IsLive() || !playerObject.TryGetComponent(out PlayerHealth health))
             {
                 continue;
             }
@@ -130,9 +134,18 @@ public class GameStateManager : NetworkBehaviour
             }
         }
 
+        if (playerObjectCount > 0)
+        {
+            anyPlayerHasSpawned = true;
+        }
+
         // Nothing spawned yet. Without this the match would end on the very first tick after
         // State flips to InProgress, because the player objects are not resolvable yet.
-        if (playerObjectCount == 0)
+        //
+        // The latch is what separates that from "everyone has left": once a player has been
+        // seen, playerObjectCount dropping back to zero is a real end condition and falls
+        // through to the aliveCount check below.
+        if (!anyPlayerHasSpawned)
         {
             return;
         }
@@ -222,21 +235,6 @@ public class GameStateManager : NetworkBehaviour
 
         waveBreakPending = true;
         waveBreakTimer = TickTimer.CreateFromSeconds(Runner, secondsBetweenWaves);
-    }
-
-    /// <summary>
-    /// Adds to the shared team score. Called by Enemy on death, and later by powerups.
-    /// </summary>
-    public void AddScore(int points)
-    {
-        // Only the host may write networked state. Clients receive the new total through
-        // replication, so there is nothing for them to do here.
-        if (!Object.HasStateAuthority || points <= 0)
-        {
-            return;
-        }
-
-        TeamScore += points;
     }
 
     /// <summary>

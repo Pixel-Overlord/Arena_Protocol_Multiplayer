@@ -93,7 +93,11 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     /// 
     /// </summary>
     /// <param name="damageAmount">The amount of damage to subtract from the player's current health.</param>
-    public void applyDamage(float damageAmount)
+    /// <param name="attacker">
+    /// Ignored - there is no friendly fire scoring. Present because IDamageable is shared
+    /// with Enemy, which does need to know who landed the shot.
+    /// </param>
+    public void applyDamage(float damageAmount, PlayerRef attacker)
     {
         if (!Object.HasStateAuthority || isDead)
         {
@@ -127,5 +131,36 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
         }
 
         currentHealth = Mathf.Min(maxHealth, currentHealth + healAmount);
+    }
+
+    /// <summary>
+    /// Copies this player's health into a snapshot that will outlive the object. Host-side
+    /// only, called just before the player is despawned on disconnect.
+    /// </summary>
+    public void CaptureStateInto(ref SavedPlayerState state)
+    {
+        // A dead player is recorded as zero, which RestoreState reads as "leave the fresh
+        // full health alone". There is no respawn in this game, so bringing someone back on
+        // 0 HP would hand them a body they could never play again.
+        state.Health = isDead ? 0f : currentHealth;
+    }
+
+    /// <summary>
+    /// Writes a saved health value back onto a freshly respawned player.
+    ///
+    /// Must run after Spawned(), which unconditionally resets currentHealth to maxHealth -
+    /// that is why PlayerSpawner applies this once runner.Spawn has returned rather than in
+    /// an onBeforeSpawned callback, which would run too early and be overwritten.
+    /// </summary>
+    public void RestoreState(SavedPlayerState state)
+    {
+        if (!Object.HasStateAuthority || state.Health <= 0f)
+        {
+            return;
+        }
+
+        // Clamped rather than trusted: maxHealth is a serialized prefab value and could
+        // have been lowered since the snapshot was taken.
+        currentHealth = Mathf.Clamp(state.Health, 0f, maxHealth);
     }
 }

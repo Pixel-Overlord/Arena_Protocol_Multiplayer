@@ -71,14 +71,17 @@ public class PlayerCamera : NetworkBehaviour
 
         if (playerHealth.isDead)
         {
-            if (spectateTarget == null || spectateTarget.isDead)
+            // IsLive rather than a null check: the player being spectated may have
+            // disconnected, and a despawned player object is parked by the pool rather than
+            // destroyed - so the reference stays non-null and reading isDead off it throws.
+            if (!spectateTarget.IsLive() || spectateTarget.isDead)
             {
                 spectateTarget = findLivingPlayer();
             }
 
             if (spectateTarget == null)
             {
-                return; // everyone's dead, hold last position.
+                return; // everyone's dead or gone, hold last position.
             }
 
             followTarget = spectateTarget.transform;
@@ -100,7 +103,9 @@ public class PlayerCamera : NetworkBehaviour
     {
         foreach (var player in FindObjectsOfType<PlayerHealth>())
         {
-            if (player != playerHealth && !player.isDead)
+            // IsLive is checked before isDead, and in that order: a parked pool instance
+            // would throw the moment isDead is read.
+            if (player != playerHealth && player.IsLive() && !player.isDead)
             {
                 return player;
             }

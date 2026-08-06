@@ -69,12 +69,6 @@ public class PlayerAbility : NetworkBehaviour
     public bool IsShieldActive => Type == AbilityType.Shield && Meter > 0f;
 
     /// <summary>
-    /// True while the ability is running. Meter is private because only this class may
-    /// change it; the HUD needs to read the state, not write it.
-    /// </summary>
-    public bool IsActive => Meter > 0f;
-
-    /// <summary>
     /// How full the power bar is, 0-1.
     /// </summary>
     public float MeterNormalized
@@ -109,6 +103,95 @@ public class PlayerAbility : NetworkBehaviour
     public bool IsOnCooldown
     {
         get { return Meter <= 0f && CooldownNormalized > 0f; }
+    }
+
+    /// <summary>
+    /// Gives this player a specific ability. Called by PlayerSpawner, which decides who gets
+    /// what so the two players in a match never end up with the same one.
+    /// </summary>
+    public void AssignAbility(AbilityType abilityType)
+    {
+        if (!Object.HasStateAuthority)
+        {
+            return;
+        }
+
+        Type = abilityType;
+    }
+
+    /// <summary>
+    /// Picks an ability with a coin flip. Only used when there is nothing to complement -
+    /// the first player into the arena. Once someone holds one, PlayerSpawner hands the
+    /// other player the opposite rather than rolling again.
+    /// </summary>
+    public void AssignRandomAbility()
+    {
+        AssignAbility(Random.Range(0, 2) == 0 ? AbilityType.Shield : AbilityType.Heal);
+    }
+
+    /// <summary>
+    /// Copies the ability state into a snapshot that will outlive this object, so a player
+    /// who disconnects mid-cooldown cannot dodge it by rejoining.
+    ///
+    /// Host-side only, called just before the player is despawned on disconnect.
+    /// </summary>
+    public void CaptureStateInto(ref SavedPlayerState state)
+    {
+        state.AbilityType = Type;
+        state.AbilityMeter = Meter;
+
+        // Stored as seconds, not as the TickTimer itself - see SavedPlayerState for why.
+        float? cooldownRemaining = null;
+
+        if (Runner != null)
+        {
+            cooldownRemaining = cooldown.RemainingTime(Runner);
+        }
+
+        // No value means the timer was never started or has already expired, both of which
+        // mean there is nothing left to serve.
+        state.AbilityCooldownRemainingSeconds = cooldownRemaining ?? 0f;
+    }
+
+    /// <summary>
+    /// Puts back the ability a returning player disconnected with, including how much active
+    /// duration was left and how much of the cooldown still had to run.
+    ///
+    /// Must run after Spawned(), which zeroes the meter - that is why PlayerSpawner applies
+    /// this once runner.Spawn has returned rather than in an onBeforeSpawned callback, which
+    /// would run too early and be overwritten.
+    /// </summary>
+    public void RestoreState(SavedPlayerState state)
+    {
+        if (!Object.HasStateAuthority)
+        {
+            return;
+        }
+
+        Type = state.AbilityType;
+
+        // Clamped rather than trusted: maxMeter is a serialized prefab value and could have
+        // been lowered since the snapshot was taken.
+        Meter = Mathf.Clamp(state.AbilityMeter, 0f, maxMeter);
+
+        // Rebuilt against the current tick, so someone who dropped with 2s of cooldown left
+        // still has 2s left when they come back - rather than a timer from a stale tick that
+        // would read as already expired.
+        cooldown = state.AbilityCooldownRemainingSeconds > 0f
+            ? TickTimer.CreateFromSeconds(Runner, state.AbilityCooldownRemainingSeconds)
+            : default;
+
+        // The meter came back as "still running", so the glow has to come back with it -
+        // otherwise a restored shield would be active but invisible to both players.
+        // HealShared is not reproduced here; ApplyHealTick recomputes it on the next tick.
+        if (Meter <= 0f)
+        {
+            Glow = GlowState.None;
+        }
+        else
+        {
+            Glow = Type == AbilityType.Shield ? GlowState.Shield : GlowState.HealSelf;
+        }
     }
 
     public override void Spawned()
@@ -208,7 +291,9 @@ public class PlayerAbility : NetworkBehaviour
         {
             NetworkObject otherPlayer = Runner.GetPlayerObject(player);
 
-            if (otherPlayer == null || otherPlayer == Object)
+            // IsLive rather than a null check: a despawned player object is parked rather
+            // than destroyed by the pool, and reading isDead off one would throw.
+            if (!otherPlayer.IsLive() || otherPlayer == Object)
             {
                 continue;
             }
