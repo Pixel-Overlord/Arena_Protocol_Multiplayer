@@ -68,6 +68,49 @@ public class PlayerAbility : NetworkBehaviour
     [Tooltip("What PlayerHealth.ApplyDamage checks to decide whether to negate damage.\r\nScript changes � new file ")]
     public bool IsShieldActive => Type == AbilityType.Shield && Meter > 0f;
 
+    /// <summary>
+    /// True while the ability is running. Meter is private because only this class may
+    /// change it; the HUD needs to read the state, not write it.
+    /// </summary>
+    public bool IsActive => Meter > 0f;
+
+    /// <summary>
+    /// How full the power bar is, 0-1. Used directly as an Image.fillAmount.
+    /// </summary>
+    public float MeterNormalized
+    {
+        get { return maxMeter > 0f ? Mathf.Clamp01(Meter / maxMeter) : 0f; }
+    }
+
+    /// <summary>
+    /// How much of the recovery window is left, 0-1. Lets the HUD show the bar refilling
+    /// while the ability is unavailable, instead of just sitting empty with no explanation.
+    /// </summary>
+    public float CooldownNormalized
+    {
+        get
+        {
+            // Runner is null until this object is spawned, and RemainingTime needs it.
+            if (Runner == null || cooldownSeconds <= 0f)
+            {
+                return 0f;
+            }
+
+            float? remaining = cooldown.RemainingTime(Runner);
+
+            // No value means the timer was never started or has already expired.
+            return remaining.HasValue ? Mathf.Clamp01(remaining.Value / cooldownSeconds) : 0f;
+        }
+    }
+
+    /// <summary>
+    /// True when the ability is spent and still recovering, so the HUD can grey the bar out.
+    /// </summary>
+    public bool IsOnCooldown
+    {
+        get { return Meter <= 0f && CooldownNormalized > 0f; }
+    }
+
     public override void Spawned()
     {
         if (glowRenderer != null)

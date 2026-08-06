@@ -584,8 +584,8 @@ GameObject:
   - component: {fileID: 541138864}
   - component: {fileID: 541138863}
   - component: {fileID: 541138865}
-  - component: {fileID: 541138866}
   - component: {fileID: 541138867}
+  - component: {fileID: 541138866}
   m_Layer: 0
   m_Name: FusionBootstrap
   m_TagString: Untagged

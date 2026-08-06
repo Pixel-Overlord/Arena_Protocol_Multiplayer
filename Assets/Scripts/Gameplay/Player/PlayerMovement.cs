@@ -11,10 +11,12 @@ using UnityEngine;
 public class PlayerMovement : NetworkBehaviour
 {
     private NetworkCharacterController characterController;
+    private PlayerHealth playerHealth;
 
     private void Awake()
     {
         characterController = GetComponent<NetworkCharacterController>();
+        playerHealth = GetComponent<PlayerHealth>();
     }
 
     /// <summary>
@@ -22,6 +24,12 @@ public class PlayerMovement : NetworkBehaviour
     /// </summary>
     public override void FixedUpdateNetwork()
     {
+        // A corpse doesn't walk, and once the match is over nothing in the arena moves.
+        if (playerHealth.isDead || GameStateManager.IsMatchOver)
+        {
+            return;
+        }
+
         // Exit if this player has no input.
         if (GetInput(out NetworkInputData input) == false)
         {

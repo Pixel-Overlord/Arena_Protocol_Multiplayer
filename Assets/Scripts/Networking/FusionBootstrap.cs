@@ -69,7 +69,7 @@ public class FusionBootstrap : MonoBehaviour, INetworkRunnerCallbacks
         args.GameMode = mode;
         args.SessionName = roomName;
         args.SceneManager = GetComponent<NetworkSceneManagerDefault>();
-        args.ObjectProvider = GetComponent<NetworkObjectProviderDefault>();
+        args.ObjectProvider = GetComponent<PooledNetworkObjectProvider>();
 
         // Only the host loads the arena. A joining client is told which scene
         // to load by the host, so passing a scene here would fight that.

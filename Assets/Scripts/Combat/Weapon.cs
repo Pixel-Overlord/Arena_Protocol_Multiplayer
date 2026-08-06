@@ -17,11 +17,24 @@ public class Weapon : NetworkBehaviour
     [Tooltip("Cooldown timer for projectile.")]
     [Networked] private TickTimer cooldownTimer { get; set; }
 
+    private PlayerHealth playerHealth;
+
+    private void Awake()
+    {
+        playerHealth = GetComponent<PlayerHealth>();
+    }
+
     /// <summary>
     /// Processes network input and fires a projectile if the fire button is pressed and the cooldown has expired.
     /// </summary>
     public override void FixedUpdateNetwork()
     {
+        // A dead player can't shoot, and after GAME OVER nobody can.
+        if (playerHealth.isDead || GameStateManager.IsMatchOver)
+        {
+            return;
+        }
+
         if (!GetInput(out NetworkInputData input))
         {
             return;
