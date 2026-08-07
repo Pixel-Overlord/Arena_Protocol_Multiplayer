@@ -22,16 +22,30 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private int maxEnemiesPerWave = 15;
 
     /// <summary>
-    /// Calculates the number of enemies in a wave based on the wave number, scaling from a base count and clamping to
-    /// the allowed range.
+    /// Calculates the number of enemies in a wave based on the wave number.
     /// </summary>
-    /// <param name="waveNumber">The wave number used to determine the enemy count.</param>
-    /// <returns>The number of enemies for the specified wave</returns>
+    /// <param name="waveNumber">The wave number for which to calculate the enemy count.</param>
+    /// <returns>The number of enemies for the specified wave.</returns>
     public int GetWaveSize(int waveNumber)
     {
-        int size = baseEnemyCount + Mathf.Max(0, waveNumber - 1) * extraEnemiesPerWave;
+        int size = baseEnemyCount;
 
-        return Mathf.Clamp(size, 1, Mathf.Max(1, maxEnemiesPerWave));
+        if (waveNumber > 1)
+        {
+            size += (waveNumber - 1) * extraEnemiesPerWave;
+        }
+
+        else if (size < 1)
+        {
+            size = 1;
+        }
+
+        else if (size > maxEnemiesPerWave)
+        {
+            size = maxEnemiesPerWave;
+        }
+
+        return size;
     }
 
     /// <summary>
@@ -50,7 +64,7 @@ public class EnemySpawner : MonoBehaviour
 
         if (!enemyPrefab.IsValid)
         {
-            Debug.LogError("EnemySpawner: no enemy prefab assigned.", this);
+            Debug.LogError("EnemySpawner: no enemy prefab assigned.");
             return 0;
         }
 
@@ -65,7 +79,7 @@ public class EnemySpawner : MonoBehaviour
 
             if (enemy == null)
             {
-                Debug.LogError($"EnemySpawner: spawn returned null for enemy {i} of wave {waveNumber}.", this);
+                Debug.LogError($"EnemySpawner: spawn returned null for enemy {i} of wave {waveNumber}.");
                 continue;
             }
 

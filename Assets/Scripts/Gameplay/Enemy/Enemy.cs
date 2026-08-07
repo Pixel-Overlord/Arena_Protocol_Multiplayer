@@ -2,11 +2,8 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Represents an enemy character that patrols, chases, and attacks players in a networked multiplayer environment.
+/// Represents a networked enemy character that patrols, chases, and attacks players in the arena.
 /// </summary>
-/// <remarks>Handles state transitions, health management, and network synchronization for enemy AI behavior.
-/// Integrates with the game state manager and supports debugging through replicated state properties.</remarks>
-[RequireComponent(typeof(EnemyWeapon))]
 public class Enemy : NetworkBehaviour, IDamageable
 {
     public enum EnemyState
@@ -17,16 +14,17 @@ public class Enemy : NetworkBehaviour, IDamageable
         Dead
     }
 
-    [Tooltip("Replicated so clients can drive animations or debug what the host decided.")]
+    [Tooltip("The current State of Enemy.")]
     [Networked] public EnemyState State { get; set; }
 
-    [Networked] public float currentHealth { get; set; }
+    [Tooltip("The current health of Enemy.")]
+    [Networked] public float CurrentHealth { get; set; }
 
-    [Tooltip("Who this enemy locked onto. Replicated purely so the state can be inspected from a client while debugging.")]
-    [Networked] private PlayerRef targetPlayer { get; set; }
+    [Tooltip("Who this enemy locked onto.")]
+    [Networked] private PlayerRef TargetPlayer { get; set; }
 
     [Tooltip("Patrol give-up timer, so an unreachable patrol point cannot strand the enemy forever.")]
-    [Networked] private TickTimer stateTimer { get; set; }
+    [Networked] private TickTimer StateTimer { get; set; }
 
     [Header("Ranges")]
     [Tooltip("A player inside this distance is chased.")]
@@ -38,7 +36,7 @@ public class Enemy : NetworkBehaviour, IDamageable
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 3f;
 
-    [Tooltip("Degrees per second the enemy can turn. Low values make it visibly swing around towards a player instead of snapping.")]
+    [Tooltip("Degrees per second the enemy can turn.")]
     [SerializeField] private float turnSpeedDegrees = 360f;
 
     [Tooltip("How far from its spawn point the enemy will wander while patrolling.")]
@@ -52,22 +50,23 @@ public class Enemy : NetworkBehaviour, IDamageable
     [SerializeField] private float patrolTimeoutSeconds = 8f;
 
     [Header("Health")]
+    [Tooltip("Max Health for the Enemy.")]
     [SerializeField] private float maxHealth = 30f;
 
     private EnemyWeapon weapon;
 
-    // Plain fields, not [Networked]: only the host ever reads them, so replicating them
-    // would spend bandwidth on data no client can use.
+    // The position where the enemy was spawned, which is also the center of its patrol area.
     private Vector3 homePosition;
+
+    // The current patrol target point, which is randomly chosen within patrolRadius of homePosition.
     private Vector3 patrolTarget;
 
     public bool IsDead => State == EnemyState.Dead;
 
     /// <summary>
-    /// Runs on every spawn, including when the pool hands back a recycled instance -
-    /// which is exactly why all per-life state is reset here and not in Awake. Awake fires
-    /// once per GameObject; a pooled enemy would keep the previous life's health without this.
+    /// Initializes the enemy's weapon, sets the patrol area center, and resets health and target state when spawned.
     /// </summary>
+    /// <remarks>Called when the enemy is spawned to prepare it for gameplay.</remarks>
     public override void Spawned()
     {
         weapon = GetComponent<EnemyWeapon>();
@@ -80,23 +79,19 @@ public class Enemy : NetworkBehaviour, IDamageable
             return;
         }
 
-        currentHealth = maxHealth;
-        targetPlayer = PlayerRef.None;
+        CurrentHealth = maxHealth;
+        TargetPlayer = PlayerRef.None;
 
         EnterPatrol();
     }
 
     public override void FixedUpdateNetwork()
     {
-        // Clients render what the host decided; they must not run the AI themselves or the
-        // two peers would drift apart.
         if (!Object.HasStateAuthority || State == EnemyState.Dead)
         {
             return;
         }
 
-        // Match over - the arena freezes. Returning before the state machine leaves each
-        // enemy standing exactly where it was, rather than resuming its patrol.
         if (GameStateManager.IsMatchOver)
         {
             return;
@@ -151,7 +146,7 @@ public class Enemy : NetworkBehaviour, IDamageable
 
         // Arriving picks the next point rather than stopping, so patrol is a continuous
         // wander. The timer covers a point that turned out to be unreachable.
-        if (arrived || stateTimer.ExpiredOrNotRunning(Runner))
+        if (arrived || StateTimer.ExpiredOrNotRunning(Runner))
         {
             EnterPatrol();
         }
@@ -175,7 +170,7 @@ public class Enemy : NetworkBehaviour, IDamageable
             return;
         }
 
-        targetPlayer = target.Object.InputAuthority;
+        TargetPlayer = target.Object.InputAuthority;
         MoveTowards(target.transform.position);
     }
 
@@ -217,9 +212,9 @@ public class Enemy : NetworkBehaviour, IDamageable
     private void EnterPatrol()
     {
         State = EnemyState.Patrol;
-        targetPlayer = PlayerRef.None;
+        TargetPlayer = PlayerRef.None;
         patrolTarget = PickPatrolTarget();
-        stateTimer = TickTimer.CreateFromSeconds(Runner, patrolTimeoutSeconds);
+        StateTimer = TickTimer.CreateFromSeconds(Runner, patrolTimeoutSeconds);
     }
 
     private void EnterChase(PlayerHealth target)
@@ -231,13 +226,13 @@ public class Enemy : NetworkBehaviour, IDamageable
         }
 
         State = EnemyState.Chase;
-        targetPlayer = target.Object.InputAuthority;
+        TargetPlayer = target.Object.InputAuthority;
     }
 
     private void EnterAttack(PlayerHealth target)
     {
         State = EnemyState.Attack;
-        targetPlayer = target.Object.InputAuthority;
+        TargetPlayer = target.Object.InputAuthority;
     }
 
     #endregion
@@ -245,12 +240,10 @@ public class Enemy : NetworkBehaviour, IDamageable
     #region Vector maths helpers
 
     /// <summary>
-    /// Nearest living player and the squared distance to them, or null if nobody is alive.
-    ///
-    /// Walks Runner.ActivePlayers rather than FindObjectsOfType: this runs every tick for
-    /// every enemy, and FindObjectsOfType would scan the whole scene and allocate an array
-    /// each time. GetPlayerObject is a dictionary lookup that PlayerSpawner already fills in.
+    /// Finds the nearest live player and calculates the squared distance to that player.
     /// </summary>
+    /// <param name="sqrDistance">The squared distance to the nearest live player.</param>
+    /// <returns>The PlayerHealth of the nearest live player, or null if no live players are found.</returns>
     private PlayerHealth FindNearestLivePlayer(out float sqrDistance)
     {
         PlayerHealth nearest = null;
@@ -260,24 +253,18 @@ public class Enemy : NetworkBehaviour, IDamageable
         {
             NetworkObject playerObject = Runner.GetPlayerObject(player);
 
-            // IsLive rather than a null check: a despawned player object is parked by the
-            // pool rather than destroyed, so it can still be handed back here and reading
-            // isDead off it would throw inside FixedUpdateNetwork.
-            if (!playerObject.IsLive())
+            if (!playerObject.IsLive() ||
+                !playerObject.TryGetComponent(out PlayerHealth health) ||
+                health.isDead)
             {
                 continue;
             }
 
-            if (!playerObject.TryGetComponent(out PlayerHealth health) || health.isDead)
-            {
-                continue;
-            }
+            float distance = (playerObject.transform.position - transform.position).sqrMagnitude;
 
-            float candidateSqrDistance = (playerObject.transform.position - transform.position).sqrMagnitude;
-
-            if (candidateSqrDistance < sqrDistance)
+            if (distance < sqrDistance)
             {
-                sqrDistance = candidateSqrDistance;
+                sqrDistance = distance;
                 nearest = health;
             }
         }
@@ -286,30 +273,34 @@ public class Enemy : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// A random point on the XZ plane within patrolRadius of the spawn position, so enemies
-    /// wander their own area instead of all drifting to one corner of the arena.
+    /// Picks a random point within patrolRadius of the home position to serve as the next patrol target.
     /// </summary>
+    /// <returns>The target Vector.</returns>
     private Vector3 PickPatrolTarget()
     {
         Vector2 offset = Random.insideUnitCircle * patrolRadius;
 
-        // Keep the enemy's current height - there is no navmesh to sample a floor from.
-        return new Vector3(homePosition.x + offset.x, transform.position.y, homePosition.z + offset.y);
+        Vector3 target = homePosition;
+        target.x += offset.x;
+        target.z += offset.y;
+        target.y = transform.position.y;
+
+        return target;
     }
 
     /// <summary>
-    /// Steps towards a destination at moveSpeed and turns to face the way it is going.
-    /// Moves the transform directly, exactly like Projectile does: correct here because
-    /// only the state authority runs this, and NetworkTransform replicates the result.
+    /// This moves the enemy towards a destination at a constant speed, ignoring vertical differences
+    /// to keep movement planar.
     /// </summary>
+    /// <param name="destination">To where the Enemy will move.</param>
     private void MoveTowards(Vector3 destination)
     {
         Vector3 toDestination = destination - transform.position;
 
-        // Movement is planar. Without this an enemy would try to climb towards a player
-        // standing on higher ground and lift off the floor.
+        // the enemy walks on the XZ plane.
         toDestination.y = 0f;
 
+        // Squared distance check: avoids a square root every tick per enemy.
         if (toDestination.sqrMagnitude < 0.0001f)
         {
             return;
@@ -325,7 +316,7 @@ public class Enemy : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// Rotates towards a direction at a capped rate rather than snapping to it.
+    /// Makes the enemy face the specified direction, turning at a maximum rate of turnSpeedDegrees per second.
     /// </summary>
     private void FaceDirection(Vector3 direction)
     {
@@ -336,9 +327,10 @@ public class Enemy : NetworkBehaviour, IDamageable
     #endregion
 
     /// <summary>
-    /// Reduces the enemy's health by the specified amount and handles death state transitions.
+    /// Reduces the enemy's health by the specified amount and handles death state and despawning if health reaches
+    /// zero.
     /// </summary>
-    /// <param name="damageAmount">The amount of damage to subtract from the enemy's current health.</param>
+    /// <param name="damageAmount">The amount to subtract from the enemy's current health.</param>
     public void applyDamage(float damageAmount)
     {
         if (!Object.HasStateAuthority || State == EnemyState.Dead)
@@ -346,19 +338,15 @@ public class Enemy : NetworkBehaviour, IDamageable
             return;
         }
 
-        currentHealth = Mathf.Max(0f, currentHealth - damageAmount);
+        CurrentHealth = Mathf.Max(0f, CurrentHealth - damageAmount);
 
-        if (currentHealth > 0f)
+        if (CurrentHealth > 0f)
         {
             return;
         }
 
-        // Set the state before despawning so anything reading it this tick sees a corpse
-        // rather than a full-health enemy.
         State = EnemyState.Dead;
 
-        // Killing enemies deliberately awards no points - the score comes only from collecting
-        // energy orbs. The wave loop still needs telling so the next wave can be released.
         if (GameStateManager.Instance != null)
         {
             GameStateManager.Instance.NotifyEnemyKilled();
