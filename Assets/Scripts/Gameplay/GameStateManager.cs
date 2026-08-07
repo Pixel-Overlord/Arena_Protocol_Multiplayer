@@ -1,15 +1,14 @@
+using System.Linq;
 using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Gates the start of the match. Nothing in the project detected "everyone has arrived"
-/// before this - players simply spawned as they connected. The first enemy wave waits on
-/// State flipping to InProgress.
-///
-/// Must live on a scene NetworkObject in Arena.unity. A plain MonoBehaviour or a bare
-/// SimulationBehaviour will never receive Fusion callbacks - that is the exact trap called
-/// out in PlayerSpawner's header comment.
+/// Manages the overall game state, including player status, wave progression, and team score in a networked arena
+/// match.
 /// </summary>
+/// <remarks>Coordinates match flow, tracks live enemies, handles wave transitions, and synchronizes state across
+/// networked clients. Provides static access for efficient event reporting and ensures consistent game logic during
+/// match lifecycle events.</remarks>
 public class GameStateManager : NetworkBehaviour
 {
     public enum MatchState
@@ -20,17 +19,12 @@ public class GameStateManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// The one GameStateManager in the arena. Mirrors how FusionBootstrap.Instance is used,
-    /// and saves every enemy from running FindObjectOfType just to report a kill.
+    /// Gets the singleton instance of the GameStateManager.
     /// </summary>
     public static GameStateManager Instance { get; private set; }
 
     /// <summary>
-    /// True once every player has died. Read by Enemy, EnemyWeapon, Projectile, Weapon and
-    /// PlayerMovement to freeze the whole arena - "nothing should move" once GAME OVER shows.
-    ///
-    /// Deliberately tolerant of a missing or despawned manager: before the match object
-    /// exists nothing is frozen, which is the safe default.
+    /// Gets a value indicating whether the match has ended.
     /// </summary>
     public static bool IsMatchOver
     {
@@ -48,31 +42,32 @@ public class GameStateManager : NetworkBehaviour
     [Tooltip("Replicated so clients can show a 'waiting for opponent' message later.")]
     [Networked] public MatchState State { get; set; }
 
-    [Tooltip("Shared team score - both players feed the same number, and it only comes from collecting energy orbs. Replicated so each peer's HUD shows the same total.")]
+    [Tooltip("Shared team score.")]
     [Networked] public int TeamScore { get; set; }
 
-    [Tooltip("Which wave is running. 0 before the first one spawns.")]
+    [Tooltip("Tells which wave is running.")]
     [Networked] public int WaveNumber { get; set; }
 
     [Tooltip("Enemies still alive in the current wave. Replicated so the HUD can show it without asking the host.")]
-    [Networked] public int LiveEnemyCount { get; set; }
+    [Networked] public int CurrentEnemyCount { get; set; }
 
     [Tooltip("Counts down the breather between one wave being cleared and the next spawning.")]
     [Networked] private TickTimer waveBreakTimer { get; set; }
 
-    [Tooltip("True while waiting out the gap between waves. Needed because a TickTimer that was never started also reports 'expired', which would otherwise spawn the next wave instantly.")]
+    [Tooltip("True while waiting out the gap between waves.")]
     [Networked] private NetworkBool waveBreakPending { get; set; }
 
-    [Tooltip("How many players must be in the session before the first wave spawns. Set to 1 while testing solo in the editor.")]
+    [Tooltip("How many players must be in the session before the first wave spawns.")]
     [SerializeField] private int requiredPlayers = 2;
 
-    [Tooltip("Breather between clearing a wave and the next one arriving.")]
+    [Tooltip("Time between clearing a wave and the next one arriving.")]
     [SerializeField] private float secondsBetweenWaves = 3f;
 
     [SerializeField] private EnemySpawner enemySpawner;
 
-    // Host-only rather than [Networked]: only the state authority runs the end-of-match
-    // check, and this project does not do host migration, so no peer needs to read it.
+    // This prevents the match from ending immediately on the first tick after State flips to InProgress,
+    // when the player objects are not yet resolvable.
+    // Once a player has been seen, playerObjectCount dropping back to zero is a real end condition.
     private bool anyPlayerHasSpawned;
 
     public override void Spawned()
@@ -87,7 +82,7 @@ public class GameStateManager : NetworkBehaviour
             State = MatchState.WaitingForPlayers;
             TeamScore = 0;
             WaveNumber = 0;
-            LiveEnemyCount = 0;
+            CurrentEnemyCount = 0;
             waveBreakPending = false;
             anyPlayerHasSpawned = false;
         }
@@ -122,9 +117,6 @@ public class GameStateManager : NetworkBehaviour
         {
             NetworkObject playerObject = Runner.GetPlayerObject(player);
 
-            // IsLive rather than a null check: a despawned player object is parked by the
-            // pool rather than destroyed, so it can still be handed back here, and reading
-            // isDead off it would throw and take the whole simulation with it.
             if (!playerObject.IsLive() || !playerObject.TryGetComponent(out PlayerHealth health))
             {
                 continue;
@@ -158,7 +150,7 @@ public class GameStateManager : NetworkBehaviour
         // both players either survive or lose together, not a last-man-standing mode.
         bool someoneDied = aliveCount < playerObjectCount;
 
-        // Kept from the previous rule: if everybody disconnects mid-match the loop would
+        // If everybody disconnects mid-match the loop would
         // otherwise sit in InProgress forever with no players left to die.
         bool everyoneLeft = playerObjectCount == 0;
 
@@ -180,7 +172,7 @@ public class GameStateManager : NetworkBehaviour
     private void TickWaveLoop()
     {
         // A wave is still being fought.
-        if (LiveEnemyCount > 0)
+        if (CurrentEnemyCount > 0)
         {
             return;
         }
@@ -202,32 +194,25 @@ public class GameStateManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Advances the wave counter and asks the spawner to fill the arena.
+    /// Starts the next wave by incrementing the wave number and spawning enemies using the assigned enemy spawner.
     /// </summary>
     private void StartNextWave()
     {
         if (enemySpawner == null)
         {
-            Debug.LogError("GameStateManager: no EnemySpawner assigned, no enemies will spawn.", this);
+            Debug.LogError("GameStateManager: no EnemySpawner assigned, no enemies will spawn.");
             return;
         }
 
         waveBreakPending = false;
         WaveNumber++;
 
-        // Trusting the spawner's return value rather than the requested size: if a spawn
-        // failed, counting it would leave LiveEnemyCount permanently above zero and the
-        // wave loop would stall waiting for a kill that can never happen.
-        LiveEnemyCount = enemySpawner.SpawnWave(Runner, WaveNumber);
-
-        if (LiveEnemyCount <= 0)
-        {
-            Debug.LogError($"GameStateManager: wave {WaveNumber} spawned no enemies, wave loop has stalled.", this);
-        }
+        // SpawnWave returns how many enemies actually spawned.
+        CurrentEnemyCount = enemySpawner.SpawnWave(Runner, WaveNumber);
     }
 
     /// <summary>
-    /// Called by Enemy when it dies. Starts the breather once the wave is wiped out.
+    /// Decrements the current enemy count and starts the wave break timer if all enemies are defeated.
     /// </summary>
     public void NotifyEnemyKilled()
     {
@@ -236,27 +221,26 @@ public class GameStateManager : NetworkBehaviour
             return;
         }
 
-        // Never below zero - a double-report would otherwise push the count negative and
-        // the "wave cleared" test would still pass, spawning waves early.
-        LiveEnemyCount = Mathf.Max(0, LiveEnemyCount - 1);
-
-        if (LiveEnemyCount > 0)
+        if (CurrentEnemyCount <= 0)
         {
             return;
         }
 
-        waveBreakPending = true;
-        waveBreakTimer = TickTimer.CreateFromSeconds(Runner, secondsBetweenWaves);
+        CurrentEnemyCount--;
+
+        if (CurrentEnemyCount == 0)
+        {
+            waveBreakPending = true;
+            waveBreakTimer = TickTimer.CreateFromSeconds(Runner, secondsBetweenWaves);
+        }
     }
 
     /// <summary>
-    /// Adds to the shared team score. Called by EnergyOrb when either player collects one -
-    /// orbs are the only thing that scores, so killing enemies deliberately awards nothing.
+    /// Increments the team's score by the specified number of points.
     /// </summary>
+    /// <param name="points">The number of points to add to the team's score.</param>
     public void AddScore(int points)
     {
-        // Only the host may write networked state. Clients receive the new total through
-        // replication, so there is nothing for them to do here.
         if (!Object.HasStateAuthority || points <= 0)
         {
             return;
@@ -266,12 +250,11 @@ public class GameStateManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Called by PlayerSpawner every time a player successfully spawns.
+    /// Notifies the game that a player has spawned and initiates the match if all conditions are met.
     /// </summary>
+    /// <param name="runner">The network runner managing the current game session.</param>
     public void NotifyPlayerSpawned(NetworkRunner runner)
     {
-        // Only the host decides when the match starts. Clients are told via the
-        // replicated State property.
         if (!runner.IsServer)
         {
             return;
@@ -284,14 +267,7 @@ public class GameStateManager : NetworkBehaviour
             return;
         }
 
-        // ActivePlayers is an IEnumerable<PlayerRef>. Counted with a plain foreach rather
-        // than Linq's Count() to avoid the per-call allocation - this runs on the host.
-        int playerCount = 0;
-
-        foreach (PlayerRef player in runner.ActivePlayers)
-        {
-            playerCount++;
-        }
+        int playerCount = runner.ActivePlayers.Count();
 
         if (playerCount < requiredPlayers)
         {

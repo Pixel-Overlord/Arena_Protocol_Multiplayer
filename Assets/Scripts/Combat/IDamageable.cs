@@ -1,20 +1,19 @@
 using Fusion;
 
 /// <summary>
-/// Anything a projectile can hurt. Lets Projectile.cs stop hardcoding PlayerHealth,
-/// so the same bullet script works for players shooting enemies and enemies shooting players.
+/// Defines a contract for objects that can receive damage and report their health status.
+/// Such as players and enemies.
 /// </summary>
 public interface IDamageable
 {
     /// <summary>
-    /// Subtract health. Implementations are expected to guard on state authority
-    /// themselves, exactly as PlayerHealth.applyDamage already does.
+    /// Applies damage to this target, reducing its health.
     /// </summary>
-    /// <param name="damageAmount">How much health to take off.</param>
+    /// <param name="damageAmount">Amount of damage the target would get.</param>
     void applyDamage(float damageAmount);
 
     /// <summary>
-    /// True once this target is out of health. Used to skip corpses.
+    /// This property indicates whether the target is dead (health <= 0).
     /// </summary>
     bool IsDead { get; }
 }
