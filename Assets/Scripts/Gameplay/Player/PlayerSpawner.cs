@@ -2,24 +2,19 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Holds the arena's spawn points and performs the actual spawn.
-///
-/// This is a plain MonoBehaviour on purpose. As a SimulationBehaviour it relied on
-/// Fusion discovering it in the loaded scene, which never happened: Fusion only
-/// registers NetworkObjects (NetworkSceneManagerDefault.cs:662) and a NetworkObject
-/// only tracks NetworkBehaviours, so IPlayerJoined was never dispatched here.
-/// FusionBootstrap now drives it explicitly through INetworkRunnerCallbacks.
+/// Manages spawning and despawning of player objects in the game.
 /// </summary>
+/// <remarks>Handles both new and returning players by restoring saved state when available, and ensures that each
+/// player receives a complementary ability.</remarks>
 public class PlayerSpawner : MonoBehaviour
 {
     // Why not GameObject?
     // Because NetworkPrefabRef is a special type that allows us to reference a prefab that can be spawned over the network.
     [SerializeField] private NetworkPrefabRef playerPrefab;
 
+    [Tooltip("List of spawn points for players.")]
     [SerializeField] private Transform[] spawnPoints;
 
-    // Cached rather than searched per spawn - FindObjectOfType is expensive and this runs
-    // on the join path. Assigned in Awake because both objects live in the arena scene.
     private GameStateManager gameStateManager;
 
     private void Awake()
@@ -32,6 +27,13 @@ public class PlayerSpawner : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Spawns a player at a designated spawn point.
+    /// </summary>
+    /// <remarks>Only the server can spawn players. Prevents multiple spawns for the same player and ensures
+    /// proper registration and initialization.</remarks>
+    /// <param name="runner">The network runner managing the networked game state.</param>
+    /// <param name="player">The reference to the player to spawn.</param>
     public void SpawnPlayer(NetworkRunner runner, PlayerRef player)
     {
         // Only the state authority is allowed to spawn networked objects.
@@ -41,36 +43,24 @@ public class PlayerSpawner : MonoBehaviour
         }
 
         // Guard against being asked twice for the same player.
-        //
-        // IsLive rather than a null check, and it matters here: a despawned player object is
-        // parked by the pool rather than destroyed, so a stale one being handed back would
-        // make this bail out and a rejoining player would never spawn at all.
         if (runner.GetPlayerObject(player).IsLive())
         {
             return;
         }
 
-        // Position always comes from a spawn point, even for a returning player: dropping
-        // someone back where they vanished can rematerialise them inside a live wave.
+        // Position always comes from a spawn point.
         Transform spawnPoint = GetSpawnPoint(player);
+
         NetworkObject playerObject = runner.Spawn(
             playerPrefab,
             spawnPoint.position,
             spawnPoint.rotation,
             player);
 
-        if (playerObject == null)
-        {
-            Debug.LogError($"Spawn returned null for {player}.", this);
-            return;
-        }
-
-        // Registers the object against the player so despawning can find it
-        // again - without this GetPlayerObject always returns null.
+        // Register the spawned object with the runner so it knows which player it belongs to.
         runner.SetPlayerObject(player, playerObject);
 
-        // Applied after Spawn rather than inside it: Spawned() resets health and score, so
-        // anything written earlier would be overwritten.
+        // Apply any saved state for returning players, or assign a complementary ability for new players.
         ApplyInitialState(runner, player, playerObject);
 
         // Reported only after the spawn actually succeeded, so a failed spawn can't be
@@ -89,14 +79,15 @@ public class PlayerSpawner : MonoBehaviour
     {
         PlayerStateStore savedStates = GetSavedStates();
 
+        // If the player has a saved state, restore it. Otherwise, assign a complementary ability.
+        // This is for if player reconnects after a disconnect.
         if (savedStates != null && savedStates.TryTake(runner, player, out SavedPlayerState savedState))
         {
             RestoreReturningPlayer(playerObject, savedState);
             return;
         }
 
-        // Nobody the host recognises. Spawned() has already given them full health and a
-        // zero score, so the only thing left to decide is which ability they get.
+        // If no saved state is found, assign a complementary ability to the new player.
         if (playerObject.TryGetComponent(out PlayerAbility ability))
         {
             AssignComplementaryAbility(runner, player, ability);
@@ -104,15 +95,11 @@ public class PlayerSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// Gives a new player whichever ability nobody else is currently holding, so a two-player
-    /// match always fields one Shield and one Heal rather than risking two of the same.
-    ///
-    /// Falls back to a coin flip when there is nothing to complement: the first player into
-    /// the arena, or the case where both abilities are somehow already represented.
-    ///
-    /// Runs after runner.Spawn, so the joining player is already in ActivePlayers and has to
-    /// be skipped explicitly - otherwise they would be complementing themselves.
+    /// Assigns a complementary ability to a new player based on the abilities of active players.
     /// </summary>
+    /// <param name="runner">The network runner managing the game state.</param>
+    /// <param name="newPlayer">The reference to the new player being assigned an ability.</param>
+    /// <param name="ability">The ability object to which a complementary ability will be assigned.</param>
     private void AssignComplementaryAbility(NetworkRunner runner, PlayerRef newPlayer, PlayerAbility ability)
     {
         bool shieldTaken = false;
@@ -142,24 +129,23 @@ public class PlayerSpawner : MonoBehaviour
             }
         }
 
-        // Exactly one is spoken for, so the choice makes itself.
-        if (shieldTaken != healTaken)
+        // If one ability is taken and the other is not,
+        // assign the complementary ability to the new player.
+        if (shieldTaken && !healTaken)
         {
-            ability.AssignAbility(shieldTaken
-                ? PlayerAbility.AbilityType.Heal
-                : PlayerAbility.AbilityType.Shield);
-
-            return;
+            ability.AssignAbility(PlayerAbility.AbilityType.Heal);
         }
-
-        ability.AssignRandomAbility();
+        else if (healTaken && !shieldTaken)
+        {
+            ability.AssignAbility(PlayerAbility.AbilityType.Shield);
+        }
     }
 
     /// <summary>
-    /// Puts back everything a rejoining player left with: their health, and the ability they
-    /// had along with its remaining duration and cooldown. The team score is not per player,
-    /// so it lives on GameStateManager and survives a disconnect without being snapshotted.
+    /// Restores a returning player's health and ability state from saved data.
     /// </summary>
+    /// <param name="playerObject">The network object representing the player.</param>
+    /// <param name="savedState">The saved state containing the player's health and ability information.</param>
     private void RestoreReturningPlayer(NetworkObject playerObject, SavedPlayerState savedState)
     {
         if (playerObject.TryGetComponent(out PlayerHealth health))
@@ -182,8 +168,7 @@ public class PlayerSpawner : MonoBehaviour
 
         NetworkObject playerObject = runner.GetPlayerObject(player);
 
-        // IsLive rather than a null check: capturing the snapshot below reads networked
-        // state, which throws on an object that has already been despawned and parked.
+        // Guard against being asked to despawn a player that is not currently spawned.
         if (!playerObject.IsLive())
         {
             return;
@@ -223,20 +208,19 @@ public class PlayerSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// The host's snapshot store, or null if there is no bootstrap to ask. Null is a normal
-    /// outcome rather than an error - it just means nothing can be saved or restored, and
-    /// every spawn is treated as a brand new player.
+    /// Retrieves the saved player states from the FusionBootstrap instance.
     /// </summary>
+    /// <returns>The saved player states if the FusionBootstrap instance is not null; otherwise, null.</returns>
     private PlayerStateStore GetSavedStates()
     {
         return FusionBootstrap.Instance != null ? FusionBootstrap.Instance.PlayerStates : null;
     }
 
     /// <summary>
-    /// Picks a spawn point for the joining player, wrapping around if more
-    /// players join than there are points. Falls back to this object's own
-    /// transform so a missing/empty array can never null-reference.
+    /// Retrieves the spawn point assigned to the specified player.
     /// </summary>
+    /// <param name="player">The player for whom to retrieve the spawn point.</param>
+    /// <returns>A transform representing the player's spawn point, or the default transform if no spawn points are assigned.</returns>
     private Transform GetSpawnPoint(PlayerRef player)
     {
         if (spawnPoints == null || spawnPoints.Length == 0)
