@@ -208,9 +208,10 @@ public class PlayerSpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// Retrieves the saved player states from the FusionBootstrap instance.
+    /// Retrieves the saved player states from the FusionBootstrap instance 
+    /// when the game is running. Returns null if the FusionBootstrap instance is not initialized.
     /// </summary>
-    /// <returns>The saved player states if the FusionBootstrap instance is not null; otherwise, null.</returns>
+    /// <returns>The saved player states, or null if the FusionBootstrap instance is not initialized.</returns>
     private PlayerStateStore GetSavedStates()
     {
         return FusionBootstrap.Instance != null ? FusionBootstrap.Instance.PlayerStates : null;

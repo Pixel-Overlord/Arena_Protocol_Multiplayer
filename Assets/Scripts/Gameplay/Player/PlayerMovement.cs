@@ -19,11 +19,13 @@ public class PlayerMovement : NetworkBehaviour
     [Tooltip("Recovery before the player can dash again, measured from the start of the dash. Keep it comfortably longer than the duration.")]
     [SerializeField] private float dashCooldownSeconds = 2f;
 
+    [Tooltip("Timer used to track the duration of a dash action.")]
     [Networked] private TickTimer dashTimer { get; set; }
 
+    [Tooltip("The cooldown timer for the player's dash ability.")]
     [Networked] private TickTimer dashCooldown { get; set; }
 
-    [Tooltip("Direction the dash was launched in. Held for the whole dash so it cannot be steered mid-flight, and so a standing-still dash still has somewhere to go.")]
+    [Tooltip("Direction the dash was launched in.")]
     [Networked] private Vector3 dashDirection { get; set; }
 
     [Tooltip("Last tick's buttons, so a dash fires once on the press rather than every tick the key is held.")]
@@ -32,32 +34,35 @@ public class PlayerMovement : NetworkBehaviour
     private NetworkCharacterController characterController;
     private PlayerHealth playerHealth;
 
-    // The controller's configured walking speed, captured before any dash overwrites it.
+    // Cache the controller's maxSpeed so it can be restored after a dash.
     private float baseMaxSpeed;
 
     /// <summary>
-    /// How much of the dash cooldown is still to run, 0-1. Lets the HUD show the bar refilling
-    /// towards ready instead of just sitting empty with no explanation.
+    /// Gets the normalized dash cooldown value, ranging from 0 to 1.
     /// </summary>
     public float DashCooldownNormalized
     {
+        // since this is a property, one can only get it or set it.
         get
         {
-            // Runner is null until this object is spawned, and RemainingTime needs it.
+            // If the runner is not initialized or the cooldown duration is non-positive, return 0.
             if (Runner == null || dashCooldownSeconds <= 0f)
             {
                 return 0f;
             }
 
+            // If the cooldown timer was never started or has expired, return 0.
             float? remaining = dashCooldown.RemainingTime(Runner);
 
-            // No value means the timer was never started or has already expired.
-            return remaining.HasValue ? Mathf.Clamp01(remaining.Value / dashCooldownSeconds) : 0f;
+            if (!remaining.HasValue)
+                return 0f;
+
+            return remaining.Value / dashCooldownSeconds;
         }
     }
 
     /// <summary>
-    /// True while the dash is recovering and cannot be used, so the HUD can grey the bar out.
+    /// Indicates whether the dash ability is currently on cooldown.
     /// </summary>
     public bool IsDashOnCooldown => DashCooldownNormalized > 0f;
 
@@ -70,10 +75,7 @@ public class PlayerMovement : NetworkBehaviour
     }
 
     /// <summary>
-    /// Clears any dash left over from a previous life.
-    ///
-    /// Needed because of pooling: a rejoining player reuses a parked object whose Awake will not
-    /// run again, so someone who dropped mid-dash would otherwise come back permanently fast.
+    /// Sets the character controller's maximum speed to the base maximum speed when the object is spawned.
     /// </summary>
     public override void Spawned()
     {
@@ -81,11 +83,11 @@ public class PlayerMovement : NetworkBehaviour
     }
 
     /// <summary>
-    /// Unlike Update which runs on fixed frame update, this runs on a fixed tick.
+    /// Unlike Fixed Update which runs on fixed frame update, this runs on a fixed tick.
     /// </summary>
     public override void FixedUpdateNetwork()
     {
-        // A corpse doesn't walk, and once the match is over nothing in the arena moves.
+        // Exit if the player is dead or the match is over.
         if (playerHealth.isDead || GameStateManager.IsMatchOver)
         {
             return;
@@ -101,13 +103,7 @@ public class PlayerMovement : NetworkBehaviour
     }
 
     /// <summary>
-    /// Decides which way the player moves this tick, starting a dash if one was requested and
-    /// overriding the walk direction for as long as that dash runs.
-    ///
-    /// Deliberately not guarded on state authority. Movement here is already client-predicted,
-    /// so the dash has to be predicted too or it would not begin until the host's confirmation
-    /// arrived. Both peers derive it from the same replicated timers and the same input, so they
-    /// reach the same answer on the same tick.
+    /// Determines the movement direction based on user input and dash state.
     /// </summary>
     private Vector3 ResolveMoveDirection(NetworkInputData input)
     {
@@ -137,17 +133,12 @@ public class PlayerMovement : NetworkBehaviour
     }
 
     /// <summary>
-    /// Launches the dash as an instant change of velocity.
-    ///
-    /// Set directly rather than left to the controller's acceleration, because acceleration only
-    /// adds so much in a fifth of a second - far too little to read as a dash on top of a normal
-    /// walk. Raising maxSpeed alone has the same problem: it lifts the ceiling without doing
-    /// anything to reach it.
+    /// Starts a dash in the specified direction, setting the dash timer and cooldown timer accordingly.
     /// </summary>
+    /// <param name="inputDirection">The direction to dash in.</param>
     private void StartDash(Vector3 inputDirection)
     {
-        // A player standing still still dashes, straight ahead. Move brakes towards zero when
-        // handed a zero direction, so without this a stationary dash would fizzle out on the spot.
+        // If the input direction is nearly zero, default to dashing forward.
         Vector3 direction = inputDirection.sqrMagnitude > 0.0001f
             ? inputDirection.normalized
             : transform.forward;
