@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Runs whichever ability (Shield or Heal) this player was randomly assigned � 
+/// Runs whichever ability (Shield or Heal) this player was randomly assigned
 /// activation, meter drain, cooldown, and the glow state that shows it to everyone.
 /// </summary>
 public class PlayerAbility : NetworkBehaviour
@@ -15,7 +15,7 @@ public class PlayerAbility : NetworkBehaviour
         Heal
     }
 
-    [Tooltip("This contains the amount of color glow around player as per the ability.")]
+    [Tooltip("This contains the color glow around player as per the ability.")]
     public enum GlowState
     {
         None,
@@ -35,7 +35,7 @@ public class PlayerAbility : NetworkBehaviour
     [Tooltip("check which button was pressed previously.")]
     [Networked] private NetworkButtons previousButtons { get; set; }
 
-    [Tooltip("Purely cosmetic, but it is the only way a player can tell their shield is up. OnChangedRender fires on every peer when the value changes, so the visual follows the networked state without an RPC.")]
+    [Tooltip("This tells the ability that is activated.")]
     [Networked, OnChangedRender(nameof(OnGlowChanged))] private GlowState Glow { get; set; }
 
     [Tooltip("How long one activation lasts.")]
@@ -65,7 +65,7 @@ public class PlayerAbility : NetworkBehaviour
     private Color baseColor;
     private bool baseColorCaptured;
 
-    [Tooltip("What PlayerHealth.ApplyDamage checks to decide whether to negate damage.\r\nScript changes � new file ")]
+    [Tooltip("What PlayerHealth.ApplyDamage checks to decide whether to negate damage.")]
     public bool IsShieldActive => Type == AbilityType.Shield && Meter > 0f;
 
     /// <summary>
@@ -90,6 +90,7 @@ public class PlayerAbility : NetworkBehaviour
                 return 0f;
             }
 
+            // Remaining can be nullable float.
             float? remaining = cooldown.RemainingTime(Runner);
 
             // No value means the timer was never started or has already expired.
