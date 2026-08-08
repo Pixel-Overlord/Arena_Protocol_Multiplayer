@@ -225,6 +225,11 @@ public class PlayerAbility : NetworkBehaviour
             return;
         }
 
+        if (GameStateManager.IsMatchOver)
+        {
+            return;
+        }
+
         // WasPressed compares against last tick's buttons, giving a single event on the
         // frame Q goes down. IsSet would be true for every tick the key is held, which would
         // refill the meter continuously and make the cooldown meaningless.

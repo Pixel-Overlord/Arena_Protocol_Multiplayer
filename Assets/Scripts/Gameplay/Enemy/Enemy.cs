@@ -92,11 +92,6 @@ public class Enemy : NetworkBehaviour, IDamageable
             return;
         }
 
-        if (GameStateManager.IsMatchOver)
-        {
-            return;
-        }
-
         PlayerHealth target = FindNearestLivePlayer(out float sqrDistanceToTarget);
 
         // Squared distances throughout: comparing squares avoids a square root every tick
