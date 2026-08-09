@@ -2,16 +2,8 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// A collectible energy orb that sits at a fixed point in the arena, is picked up by walking
-/// over it, then reappears after a delay.
-///
-/// This is a scene NetworkObject placed directly in Arena.unity rather than something spawned
-/// at runtime: the orb never moves and never really goes away, so collecting it is just a
-/// state change. That keeps the whole feature in one script with no spawn-point manager, and
-/// keeps it clear of the object pool.
-///
-/// The host owns every decision. Clients only render whatever State replication hands them,
-/// which is what keeps the two peers agreeing without a single RPC.
+/// Represents an energy orb that can be collected by players, transitioning through available, collected, and hidden
+/// states with synchronized visuals and scoring.
 /// </summary>
 public class EnergyOrb : NetworkBehaviour
 {
@@ -27,7 +19,10 @@ public class EnergyOrb : NetworkBehaviour
         Hidden
     }
 
-    [Tooltip("Replicated so every peer shows the same orb in the same state. Drives both the visuals and whether the orb can be collected.")]
+    /// <summary>
+    /// Fusion automatically calls ApplyStateVisuals whenever this property changes, so the orb's appearance is always in sync with its state.
+    /// </summary>
+    [Tooltip("Current state of Orb.")]
     [Networked, OnChangedRender(nameof(ApplyStateVisuals))]
     public OrbState State { get; set; }
 
@@ -43,11 +38,10 @@ public class EnergyOrb : NetworkBehaviour
     [Tooltip("Colour shown for the brief moment between being collected and disappearing.")]
     [SerializeField] private Color collectedColor = new Color(1f, 0.9f, 0.3f);
 
-    [Tooltip("Points awarded to the player who collects this orb.")]
+    [Tooltip("Points awarded to the overall Team Score.")]
     [SerializeField] private int scoreValue = 1;
 
-    // Found rather than wired in the inspector, so a new orb needs no setup beyond dropping
-    // it in the scene and cannot end up half-configured.
+    // Cached references to the orb's Renderer and Collider, so they can be disabled when the orb is hidden or collected.
     private Renderer orbRenderer;
     private Collider orbCollider;
 
@@ -61,8 +55,6 @@ public class EnergyOrb : NetworkBehaviour
 
         if (orbRenderer != null)
         {
-            // Reading .material clones the shared material, so recolouring one orb does not
-            // recolour every other orb using the same asset.
             availableColor = orbRenderer.material.color;
         }
     }
@@ -75,18 +67,15 @@ public class EnergyOrb : NetworkBehaviour
             stateTimer = default;
         }
 
-        // Applied on spawn as well as on change: OnChangedRender only fires on transitions, so
-        // a client joining mid-match would otherwise render a collected orb as available.
+        // Apply the visuals immediately on spawn so the orb is visible to all peers.
         ApplyStateVisuals();
     }
 
     /// <summary>
-    /// Advances the orb through its collected -> hidden -> available cycle.
-    ///
-    /// Host only; every other peer learns the new state through replication. The State check
-    /// comes before the timer check on purpose - while the orb is Available the timer is not
-    /// running, and a timer that was never started cannot be asked whether it expired.
+    /// Updates the network state of the energy orb based on its current state and the expiration of the state timer.
     /// </summary>
+    /// <remarks>Handles transitions between available, collected, and hidden states, and manages the respawn
+    /// timer.</remarks>
     public override void FixedUpdateNetwork()
     {
         if (!Object.HasStateAuthority || State == OrbState.Available)
@@ -112,12 +101,11 @@ public class EnergyOrb : NetworkBehaviour
     }
 
     /// <summary>
-    /// Collects the orb when a living player walks into it.
-    ///
-    /// Host only, exactly like Projectile.OnTriggerEnter: the host is the single source of
-    /// truth for whether an orb was taken, so a client can never decide it collected one and
-    /// no orb can be scored twice.
+    /// Handles the event when another collider enters the orb's trigger zone, awarding score and updating the orb's
+    /// state if conditions are met.
     /// </summary>
+    /// <remarks>Awards score to the team.</remarks>
+    /// <param name="other">The collider that entered the trigger zone.</param>
     private void OnTriggerEnter(Collider other)
     {
         if (!Object.HasStateAuthority || State != OrbState.Available)
@@ -125,8 +113,7 @@ public class EnergyOrb : NetworkBehaviour
             return;
         }
 
-        // Colliders sit on the player's child meshes while PlayerHealth is on the prefab root,
-        // so the search has to walk upwards - the same reason Projectile does.
+        // Only award points to a player that is alive - dead players should not be able to collect orbs.
         PlayerHealth player = other.GetComponentInParent<PlayerHealth>();
 
         if (player == null || player.isDead)
@@ -134,24 +121,22 @@ public class EnergyOrb : NetworkBehaviour
             return;
         }
 
-        // The score is a shared team total, so it does not matter which player walked into the
-        // orb - the points go to the same place either way.
+        // Award points to the team score. The GameStateManager is a singleton, so we can access it directly.
         if (GameStateManager.Instance != null)
         {
             GameStateManager.Instance.AddScore(scoreValue);
         }
 
-        // Setting State here is what makes the orb uncollectible: the next trigger hit fails
-        // the guard above, and ApplyStateVisuals disables the collider on every peer.
+        // Transition to the Collected state and start the flash timer.
         State = OrbState.Collected;
         stateTimer = TickTimer.CreateFromSeconds(Runner, collectedFlashSeconds);
     }
 
     /// <summary>
-    /// Renders whatever state the orb is in. Runs on every peer - on the host because it sets
-    /// State, on clients because replication does - so all three peers agree on the visuals
-    /// without anything being sent explicitly.
+    /// Updates the orb's visual appearance and collider state based on its current state.
     /// </summary>
+    /// <remarks>Only orbs in the Available state have an active collider, preventing interaction with hidden
+    /// or collected orbs.</remarks>
     private void ApplyStateVisuals()
     {
         if (orbRenderer != null)
