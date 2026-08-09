@@ -139,6 +139,10 @@ public class PlayerSpawner : MonoBehaviour
         {
             ability.AssignAbility(PlayerAbility.AbilityType.Shield);
         }
+        else
+        {
+            ability.AssignRandomAbility();
+        }
     }
 
     /// <summary>

@@ -9,14 +9,13 @@ using UnityEngine;
 /// </summary>
 public class PlayerAbility : NetworkBehaviour
 {
-    // One can add more abilities here, but the HUD and PlayerSpawner will need to be updated to handle them.
+    // One can add more abilities here and modi, but the HUD and PlayerSpawner will need to be updated to handle them.
     public enum AbilityType
     {
         Shield,
         Heal
     }
 
-    [Tooltip("This contains the color glow around player as per the ability.")]
     public enum GlowState
     {
         None,
@@ -122,13 +121,27 @@ public class PlayerAbility : NetworkBehaviour
     }
 
     /// <summary>
-    /// Picks an ability with a coin flip. Only used when there is nothing to complement -
-    /// the first player into the arena. Once someone holds one, PlayerSpawner hands the
-    /// other player the opposite rather than rolling again.
+    /// Assigns a random ability, either Shield or Heal, to the first player.
     /// </summary>
     public void AssignRandomAbility()
     {
-        AssignAbility(Random.Range(0, 2) == 0 ? AbilityType.Shield : AbilityType.Heal);
+        AbilityType ability;
+        int value = Random.Range(0, 2);
+
+        switch(value)
+        {
+            case 0:
+                ability = AbilityType.Shield;
+                break;
+            case 1:
+                ability = AbilityType.Heal;
+                break;
+            default:
+                ability = AbilityType.Shield;
+                break;
+        }
+
+        AssignAbility(ability);
     }
 
     /// <summary>
@@ -200,8 +213,7 @@ public class PlayerAbility : NetworkBehaviour
     {
         if (glowRenderer != null)
         {
-            // Reading .material clones the shared material, so tinting one player doesn't
-            // recolour everyone using the same asset.
+            // Capture the material's original color once, so the glow can be switched off again.
             baseColor = glowRenderer.material.color;
             baseColorCaptured = true;
         }
