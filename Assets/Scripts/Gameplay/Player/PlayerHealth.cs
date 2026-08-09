@@ -13,6 +13,9 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     [Tooltip("Current HP/Health of player.")]
     [Networked] public float currentHealth { get; set; }
 
+    /// <summary>
+    /// Fusion calls OnDeathStateChanged when isDead changes, which applies visual effects for death state.
+    /// </summary>
     [Tooltip("Boolean for dead or alive state of player. If Boolean is true, player is dead.")]
     [Networked, OnChangedRender(nameof(OnDeathStateChanged))] public NetworkBool isDead { get; set; }
 
@@ -53,7 +56,7 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
     }
 
     /// <summary>
-    /// Enables or disables all body renderers and colliders based on the character's death state.
+    /// On death, disable the player's body renderers and colliders to make them invisible and non-interactive.
     /// </summary>
     private void ApplyDeathVisuals()
     {
@@ -133,8 +136,6 @@ public class PlayerHealth : NetworkBehaviour, IDamageable
             return;
         }
 
-        // Clamped rather than trusted: maxHealth is a serialized prefab value and could
-        // have been lowered since the snapshot was taken.
         currentHealth = Mathf.Clamp(state.Health, 0f, maxHealth);
     }
 }
