@@ -36,11 +36,7 @@ public class PlayerAbility : NetworkBehaviour
     [Tooltip("check which button was pressed previously.")]
     [Networked] private NetworkButtons previousButtons { get; set; }
 
-<<<<<<< Updated upstream
-    [Tooltip("This tells the ability that is activated.")]
-=======
     [Tooltip("This tells which glow to show as per the ability.")]
->>>>>>> Stashed changes
     [Networked, OnChangedRender(nameof(OnGlowChanged))] private GlowState Glow { get; set; }
 
     [Tooltip("How long one activation lasts.")]
