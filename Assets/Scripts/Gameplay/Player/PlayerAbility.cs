@@ -9,6 +9,7 @@ using UnityEngine;
 /// </summary>
 public class PlayerAbility : NetworkBehaviour
 {
+    // One can add more abilities here, but the HUD and PlayerSpawner will need to be updated to handle them.
     public enum AbilityType
     {
         Shield,
@@ -35,7 +36,11 @@ public class PlayerAbility : NetworkBehaviour
     [Tooltip("check which button was pressed previously.")]
     [Networked] private NetworkButtons previousButtons { get; set; }
 
+<<<<<<< Updated upstream
     [Tooltip("This tells the ability that is activated.")]
+=======
+    [Tooltip("This tells which glow to show as per the ability.")]
+>>>>>>> Stashed changes
     [Networked, OnChangedRender(nameof(OnGlowChanged))] private GlowState Glow { get; set; }
 
     [Tooltip("How long one activation lasts.")]
@@ -311,9 +316,9 @@ public class PlayerAbility : NetworkBehaviour
 
             // The host holds state authority over every player object, so healing someone
             // else's player from here is allowed - applyHealth's own guard passes.
-            if (otherPlayer.TryGetComponent(out PlayerHealth otherHealth) && !otherHealth.isDead)
+            if (otherPlayer.TryGetComponent(out PlayerHealth otherPlayerHealth) && !otherPlayerHealth.isDead)
             {
-                otherHealth.applyHealth(healThisTick);
+                otherPlayerHealth.applyHealth(healThisTick);
                 sharedWithSomeone = true;
             }
         }

@@ -6,19 +6,22 @@ using UnityEngine;
 /// </summary>
 public class PlayerCamera : NetworkBehaviour
 {
-    [Tooltip("World-space offset from the player. Not rotated with the player, so " +
-             "the view stays aligned with the WASD directions.")]
+    // The offset is set to (0, 10, -10) so the camera is above and behind the player, looking down at them.
+    [Tooltip("The offset camera should have with Player's position.")]
     [SerializeField] private Vector3 offset = new Vector3(0f, 10f, -10f);
 
+
+    // SmoothDamp's smoothTime is the time it takes to reach the target position,
+    // so a smaller value means a faster camera.
+    // A value of 0.15f is a good starting point for a responsive camera that still feels smooth.
     [Tooltip("Higher values make the camera lag further behind the player.")]
-    [SerializeField] private float smoothTime = 0.15f;
+    [SerializeField] private float timeToReachTargetPosition = 0.15f;
 
     private Transform cameraTransform;
     private Vector3 followVelocity;
 
     public override void Spawned()
     {
-        // Remote copies leave cameraTransform null and do nothing in LateUpdate.
         if (!HasInputAuthority)
         {
             return;
@@ -40,24 +43,16 @@ public class PlayerCamera : NetworkBehaviour
         cameraTransform.LookAt(transform.position);
     }
 
-    /// <summary>
-    /// LateUpdate rather than Update so the player has already moved this frame -
-    /// following in Update would leave the camera one frame behind and judder.
-    /// </summary>
     private void LateUpdate()
     {
-        if (cameraTransform == null)
-        {
-            return;
-        }
-
         Vector3 desiredPosition = transform.position + offset;
 
+        // Smoothly move the camera towards the desired position using SmoothDamp for a smooth follow effect.
         cameraTransform.position = Vector3.SmoothDamp(
             cameraTransform.position,
             desiredPosition,
             ref followVelocity,
-            smoothTime);
+            timeToReachTargetPosition);
 
         cameraTransform.LookAt(transform.position);
     }

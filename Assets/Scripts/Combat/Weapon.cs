@@ -16,7 +16,7 @@ public class Weapon : NetworkBehaviour
     [SerializeField] private Transform firePositionPoint;
 
     [Tooltip("Time in seconds between two projectiles to spawn or Time between two shots.")]
-    [SerializeField] private float fireRate = 0.5f;
+    [SerializeField] private float fireRate = 0.25f;
 
     [Tooltip("Cooldown timer for projectile.")]
     [Networked] private TickTimer cooldownTimer { get; set; }
@@ -33,17 +33,19 @@ public class Weapon : NetworkBehaviour
     /// </summary>
     public override void FixedUpdateNetwork()
     {
-        // A dead player can't shoot, and after GAME OVER nobody can.
+        // If the player is dead or the match is over, do not process input or fire projectiles.
         if (playerHealth.isDead || GameStateManager.IsMatchOver)
         {
             return;
         }
 
+        // If we cannot get the input data, do not proceed with firing projectiles.
         if (!GetInput(out NetworkInputData input))
         {
             return;
         }
 
+        // Only the player with state authority can fire projectiles.
         if (!Object.HasStateAuthority)
         {
             return;
@@ -64,18 +66,12 @@ public class Weapon : NetworkBehaviour
     {
         if (projectilePrefab == null || firePositionPoint == null)
         {
-            Debug.LogWarning("Projectile prefab or fire position point is not assigned.");
+            Debug.LogWarning("Projectile prefab or fire position point is not assigned.", this);
             return;
         }
 
         // Why not Instantiate? Because we are in a networked environment,
         // and we want to spawn the projectile across the network for all clients to see. Fusion handles this for us.
-        //
-        // The last argument is onBeforeSpawned: it runs after the object exists but before
-        // Spawned() is called on it. Stamping the owner here rather than after Spawn returns
-        // means the value is already correct the first time the projectile simulates, and it
-        // replicates cleanly to clients. Without this, `player` stayed PlayerRef.None and the
-        // self-hit check in Projectile could never match.
         Runner.Spawn(
             projectilePrefab,
             firePositionPoint.position,
