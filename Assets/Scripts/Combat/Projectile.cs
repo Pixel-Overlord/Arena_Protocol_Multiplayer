@@ -1,23 +1,20 @@
 using Fusion;
 using UnityEngine;
 
-/// <summary>/// 
-/// Moves forward at a fixed speed after being fired,
-/// deals damage on hitting a player, and
-/// despawns on hit or after its lifetime expires.
-/// 
-/// Note : This class is not responsible for instantiating the projectile; that is handled by another script such as ShootBullet.cs or PlayerShoot.cs.
+/// <summary>
+/// Represents a networked projectile that moves forward, applies damage to valid targets, and manages its own lifetime.
 /// </summary>
+/// <remarks>Handles both player- and enemy-fired projectiles</remarks>
 public class Projectile : NetworkBehaviour
 {
-    [Tooltip("Player who fired it, replicated. Used to skip self-hits.")]
+    [Tooltip("Player who fired it. Used to skip self-hits.")]
     [Networked] public PlayerRef player { get; set; }
 
-    [Tooltip("True when an enemy fired this instead of a player. Set by EnemyWeapon. Lets one projectile script serve both sides while still knowing who not to hurt.")]
+    [Tooltip("True when an enemy fired this instead of a player. Set by EnemyWeapon.")]
     [Networked] public NetworkBool firedByEnemy { get; set; }
 
-    [Tooltip("Counts down lifetimeSeconds; when expired, the projectile despawns even if it never hits anything so stray shots don't leak objects forever.")]
-    [Networked] private TickTimer life { get; set; }
+    [Tooltip("Counts down lifetimeSeconds; when expired, the projectile despawns even if it never hits anything.")]
+    [Networked] private TickTimer projectileLife { get; set; }
 
     [Tooltip("Foward movement speed per second")]
     [SerializeField] private float speed = 15f;
@@ -29,13 +26,13 @@ public class Projectile : NetworkBehaviour
     [SerializeField] private float lifetimeSeconds = 3f;
 
     /// <summary>
-    /// On spawn, if this object has state authority, create a TickTimer for its lifetime.
+    /// On spawn, if this object has state authority, create a TickTimer for projectile's lifetime.
     /// </summary>
     public override void Spawned()
     {
         if (Object.HasStateAuthority)
         {
-            life = TickTimer.CreateFromSeconds(Runner, lifetimeSeconds);
+            projectileLife = TickTimer.CreateFromSeconds(Runner, lifetimeSeconds);
         }
     }
 
@@ -57,7 +54,7 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
-        if (life.ExpiredOrNotRunning(Runner))
+        if (projectileLife.ExpiredOrNotRunning(Runner))
         {
             Runner.Despawn(Object);
             return;
@@ -67,16 +64,10 @@ public class Projectile : NetworkBehaviour
     }
 
     /// <summary>
-    /// Resolves what was hit to an IDamageable, filters out friendly fire, applies damage
-    /// and despawns.
-    ///
-    /// Targets IDamageable rather than PlayerHealth so the same script serves both player
-    /// bullets (which need to hurt enemies) and enemy bullets (which need to hurt players).
-    ///
-    /// Note this only runs on the state authority, so the host is the single source of
-    /// truth for every hit - clients never decide that they were shot.
+    /// Handles collision events with the projectile's trigger collider, applying damage to valid targets and despawning
+    /// the projectile as appropriate.
     /// </summary>
-    /// <param name="hitCollider">Collider of the object that's been hit.</param>
+    /// <param name="hitCollider">The collider that enters the projectile's trigger collider.</param>
     private void OnTriggerEnter(Collider hitCollider)
     {
         if (!Object.HasStateAuthority)
@@ -84,9 +75,7 @@ public class Projectile : NetworkBehaviour
             return;
         }
 
-        // The visual colliders sit on child objects (Sphere/Capsule), while the health
-        // component lives on the prefab root, so a parent search is needed as a fallback.
-        // GetComponent is used instead of TryGetComponent because interfaces are involved.
+        // Ignore collisions with other projectiles, including our own.
         IDamageable target = hitCollider.GetComponent<IDamageable>();
 
         if (target == null)
@@ -109,9 +98,7 @@ public class Projectile : NetworkBehaviour
 
         if (target is PlayerHealth playerTarget)
         {
-            // A player must not shoot themselves. This check is only meaningful for
-            // player-fired shots: enemy bullets carry PlayerRef.None, which would never
-            // match a real player's InputAuthority anyway.
+            // If the projectile was fired by a player, ignore collisions with that same player.
             if (!firedByEnemy && playerTarget.Object.InputAuthority == player)
             {
                 return;
@@ -119,9 +106,7 @@ public class Projectile : NetworkBehaviour
         }
         else if (firedByEnemy)
         {
-            // An enemy bullet hit another enemy. The layer collision matrix should already
-            // prevent this, but a mis-set layer in the inspector shouldn't turn into
-            // enemies killing each other.
+            // If the projectile was fired by an enemy, ignore collisions with other enemies.
             return;
         }
 

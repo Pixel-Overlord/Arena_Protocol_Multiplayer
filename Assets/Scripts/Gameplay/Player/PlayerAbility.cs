@@ -171,10 +171,6 @@ public class PlayerAbility : NetworkBehaviour
     /// <summary>
     /// Puts back the ability a returning player disconnected with, including how much active
     /// duration was left and how much of the cooldown still had to run.
-    ///
-    /// Must run after Spawned(), which zeroes the meter - that is why PlayerSpawner applies
-    /// this once runner.Spawn has returned rather than in an onBeforeSpawned callback, which
-    /// would run too early and be overwritten.
     /// </summary>
     public void RestoreState(SavedPlayerState state)
     {
