@@ -2,7 +2,8 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Represents a networked enemy character that patrols, chases, and attacks players in the arena.
+/// Represents a networked enemy character that patrols, chases, and attacks players within defined ranges, managing
+/// state transitions, health, and interactions with the game world.
 /// </summary>
 public class Enemy : NetworkBehaviour, IDamageable
 {
@@ -118,10 +119,10 @@ public class Enemy : NetworkBehaviour, IDamageable
     #region States
 
     /// <summary>
-    /// Wandering between random points near the spawn position, which is also what brings an
-    /// enemy back home after it gives up a chase. Chasing always wins over patrolling, so the
-    /// range check comes first.
+    /// Handles patrolling behavior and transitions to chase state if the target is within range.
     /// </summary>
+    /// <param name="target">The player whose proximity is evaluated for state transitions.</param>
+    /// <param name="inChaseRange">True if the target is within chase range; otherwise, false.</param>
     private void TickPatrol(PlayerHealth target, bool inChaseRange)
     {
         if (inChaseRange)

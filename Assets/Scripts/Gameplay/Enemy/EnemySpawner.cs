@@ -35,17 +35,10 @@ public class EnemySpawner : MonoBehaviour
             size += (waveNumber - 1) * extraEnemiesPerWave;
         }
 
-        else if (size < 1)
-        {
-            size = 1;
-        }
-
-        else if (size > maxEnemiesPerWave)
-        {
-            size = maxEnemiesPerWave;
-        }
-
-        return size;
+        // Clamped unconditionally, not as an else-branch of the growth above: the cap only
+        // ever matters once the wave has grown, so hanging it off "waveNumber <= 1" meant
+        // maxEnemiesPerWave was never applied to a single wave that could exceed it.
+        return Mathf.Clamp(size, 1, maxEnemiesPerWave);
     }
 
     /// <summary>

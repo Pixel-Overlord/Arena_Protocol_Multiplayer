@@ -45,6 +45,14 @@ public class PlayerCamera : NetworkBehaviour
 
     private void LateUpdate()
     {
+        // LateUpdate is a plain Unity callback, so it runs on every copy of this player -
+        // including the remote ones, where Spawned() returned before resolving a camera.
+        // Without this guard those copies dereference null once per frame, on every peer.
+        if (cameraTransform == null)
+        {
+            return;
+        }
+
         Vector3 desiredPosition = transform.position + offset;
 
         // Smoothly move the camera towards the desired position using SmoothDamp for a smooth follow effect.
